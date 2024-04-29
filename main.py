@@ -4,6 +4,14 @@ import open3d.visualization.rendering as rendering # type: ignore
 from open3d.visualization.gui import MouseEvent, KeyEvent # type: ignore
 from open3d.visualization.rendering import Camera # type: ignore
 import numpy as np
+from vvrpywork.constants import Key, Mouse, Color
+from vvrpywork.scene import Scene2D, Scene3D, get_rotation_matrix, world_space
+from vvrpywork.shapes import (
+    Point2D, Line2D, Triangle2D, Circle2D, Rectangle2D,
+    PointSet2D, LineSet2D, Polygon2D,
+    Point3D, Line3D, Arrow3D, Sphere3D, Cuboid3D, Cuboid3DGeneralized,
+    PointSet3D, LineSet3D, Mesh3D
+)
 
 defaultUnlit = rendering.MaterialRecord()
 defaultUnlit.shader = "defaultUnlit"
@@ -14,147 +22,138 @@ unlitLine.line_width = 5
 
 
 
-# obj_file_path = "models/F52.obj"
-obj_file_path = "models/v22_osprey.obj"
 
 
-mesh = o3d.io.read_triangle_mesh(obj_file_path)
+class UAV:
+    number_of_uavs = 0
 
-# Check if the mesh was successfully loaded
-if not mesh:
-    print(f"Error: Unable to load mesh from {obj_file_path}")
-else:
-    print(f"Mesh successfully loaded from {obj_file_path}")
+    def __init__(self, scene:Scene3D, filename:str, position:np.ndarray = None, scale:float = None):
+        
+        self.mesh = Mesh3D(filename)
+        self.scene = scene
+        self.name = filename.split("/")[-1].split(".")[0]+str(UAV.number_of_uavs)
+        UAV.number_of_uavs += 1
+
+        self.boxes=[]
+        self.boxes_names = []
+
+        self.position = np.mean(self.mesh.vertices, axis=0)
+        if position:            
+            self.move_to(position)
+        
+        self.scale(scale, fit_to_unit_sphere= (not scale))
+
+        self.scene.addUAV(self)
+
+        
+
+        
 
 
-centroid = np.mean(mesh.vertices, axis=0)
-translation_vector = -centroid  # Vector to move centroid to origin
-mesh.translate(translation_vector)
+        
+    
+    def move_to(self, position:np.ndarray):
+        "Move the UAV to the specified position"
+        dist = position - self.position
+        self.mesh.vertices += dist
+        self.position = position
+        self.mesh._update(self.name, self.scene)
 
-# Print the new centroid
-centroid = np.mean(mesh.vertices, axis=0)
-print(f"Mesh centroid: {centroid}")
+        for box, name in zip(self.boxes, self.boxes_names):
+            [box.x, box.y, box.z] = self.position
+            box._update(name, self.scene)
+    
+    def move_by(self, dist:np.ndarray):
+        "Move the UAV by the specified distance"
+        self.move_to(self.position + dist)
 
-# Scale it down 
-scale = float(1.2 / np.max(np.max(mesh.vertices, axis=0) - np.min(mesh.vertices, axis=0)))
-mesh = mesh.scale(scale, center=centroid)
+    def scale(self, scale:float = None, fit_to_unit_sphere:bool = False):
+        """
+        Scale the UAV by the specified factor.
+        If fit_to_unit_sphere is True, the UAV is scaled such that it fits inside a unit sphere
+        """
+
+        if fit_to_unit_sphere:
+            self.mesh.vertices -= self.position
+            self.mesh.vertices /= np.max(np.linalg.norm(self.mesh.vertices, axis=1))
+            self.mesh.vertices += self.position
+            self.mesh._update(self.name, self.scene)
+            return
+        self.mesh.vertices *= scale
+        self.mesh._update(self.name, self.scene)
+    
+    def create_sphere(self, radius:float, resolution:int):
+        "Create a sphere around the UAV with the specified radius and resolution"
+        if not radius:
+            radius = np.max(np.linalg.norm(self.mesh.vertices - self.position, axis=1))
+        sphere = Sphere3D(p=self.position, radius=radius, resolution=resolution)
+        self.scene.addShape(sphere, self.name+"_sphere")
+        self.boxes.append(sphere)
+        self.boxes_names.append(self.name+"_sphere")
+
+        
+    
 
 
 
-
-class Appwindow:
+class Airspace(Scene3D):
 
     def __init__(self, width, height, window_name="UAV"):
-        self.w_width = width
-        self.w_height = height
-        self.first_click = True
+        super().__init__(width, height, window_name)
+        self.uavs = {}
 
-        # initialize window & scene
-        self.window = gui.Application.instance.create_window(window_name, width, height) 
-        self._scene = gui.SceneWidget()
-        self._scene.scene = rendering.Open3DScene(self.window.renderer)
-        self._scene.scene.show_skybox(True)
 
-        # basic layout
-        self.window.set_on_layout(self._on_layout)
-        self.window.add_child(self._scene)
+    def on_key_press(self, symbol, modifiers):
+        uav = self.uavs.get("v22_osprey0")
+        if not uav:
+            return
 
-        # set mouse and key callbacks
-        self._scene.set_on_key(self._on_key_pressed)
-        # self._scene.set_on_mouse(self._on_mouse_pressed)
 
-        # set up camera
-        self._set_camera()
-        
-        self.geometries = {}
-
-        # parameters 
-        self.model_on       = True
-        self.wireframe_on   = False
-        self.sphere_on      = False
-        self.aabb_on        = False
-        self.axis_on        = False
-        self.plane_on       = False
-
-        self.plane_pos_y    = 0.0
-        self.plane_angle_x  = 0.0
-        self.plane_angle_z  = 0.0
-        
-        self.plane_pos  = np.array([0,0,0])
-        self.plane_dir  = np.array([0,1,0])
-
-        self.task_executed = False
+        if symbol == Key.UP:
+            uav.move_to(uav.position + np.array([0, 0, -1]))
+        elif symbol == Key.DOWN:
+            uav.move_to(uav.position + np.array([0, 0, 1]))
+        elif symbol == Key.LEFT:
+            uav.move_to(uav.position + np.array([-1, 0, 0]))
+        elif symbol == Key.RIGHT:
+            uav.move_to(uav.position + np.array([1, 0, 0]))
+        elif symbol == Key.SPACE:
+            uav.move_to(uav.position + np.array([0, 1, 0]))
+        elif symbol == Key.BACKSPACE:
+            uav.move_to(uav.position + np.array([0, -1, 0]))
     
-    def _on_layout(self, layout_context):
-        
-        r = self.window.content_rect
-        self._scene.frame = r
-
-    def _set_camera(self):
-
-        bounds = self._scene.scene.bounding_box
-        center = bounds.get_center()
-        self._scene.look_at(center, center - [0, 0, 5], [0, 1, 0])
-
-    def add_geometry(self, geometry, name, shader = defaultUnlit, visible = True):
+    def addUAV(self, uav:UAV):
+        self.uavs[uav.name] = uav
+        self.addShape(uav.mesh, uav.name)
     
-        self._scene.scene.add_geometry(name, geometry, shader)
-        self.geometries[name] = geometry
+    def removeUAV(self, uav:UAV):
+        self.removeShape(uav.name)
+        del self.uavs[uav.name]
+    
+    def updateUAV(self, uav:UAV):
+        self.updateShape(uav.mesh, uav.name)
 
-        self._scene.scene.show_geometry(name, visible)
 
-    def remove_geometry(self, name):
-
-        self._scene.scene.remove_geometry(name)
-
-    def _on_key_pressed(self, event):
-
-        if not event.type == event.DOWN:
-            return gui.Widget.EventCallbackResult.IGNORED
-
-        # U key 
-        if event.key == 117: 
+       
                 
-            if "unit_sphere" in self.geometries:
-
-                self.sphere_on = not self.sphere_on
-                self._scene.scene.show_geometry("unit_sphere", self.sphere_on)
-                
-                return gui.Widget.EventCallbackResult.HANDLED
-        
-        # M key 
-        if event.key == 109: 
-            print("M key pressed")
-                
-            self.model_on = not self.model_on
-            self._scene.scene.show_geometry("model", self.model_on)
             
-            return gui.Widget.EventCallbackResult.HANDLED
-        
-        return gui.Widget.EventCallbackResult.IGNORED
 
 def main():
-    global mesh
+    
+    airspace = Airspace(1920, 1080)
+
+
+    uav = UAV(airspace, "models/v22_osprey.obj", position=[0, 0, 0], scale=None)
+    
+
+    uav.create_sphere(radius=None, resolution=30)
+
+    uav.move_to(np.array((0, 0, 1)))
+
+    airspace.mainLoop()
 
     
 
-    gui.Application.instance.initialize()
-
-    app = Appwindow(1920, 1080)
-
-    unit_sphere = o3d.geometry.LineSet.create_from_triangle_mesh(
-        o3d.geometry.TriangleMesh.create_sphere(radius=1.0)).paint_uniform_color(np.array([1,0,0]))
-
-
-    app.add_geometry(unit_sphere, "unit_sphere", visible = True)
-
-
-    app.add_geometry(mesh, "model")
-
-    
-
-
-    gui.Application.instance.run()
 
 if __name__ == "__main__":
     main()
