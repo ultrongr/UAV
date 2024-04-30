@@ -34,14 +34,21 @@ models = ["B2_Spirit",
 
 
 class UAV:
-    number_of_uavs = 0
+    classes = {}
 
     def __init__(self, scene:Scene3D, filename:str, position:np.ndarray = None, scale:float = None):
         
         self.mesh = Mesh3D(filename)
         self.scene = scene
-        self.name = filename.split("/")[-1].split(".")[0]+"_" + str(UAV.number_of_uavs)
-        UAV.number_of_uavs += 1
+
+        self._class = filename.split("/")[-1].split(".")[0]
+        if not self._class in UAV.classes:
+            UAV.classes[self._class] = 0
+        self.name = f"{self._class}_{UAV.classes[self._class]}"
+        UAV.classes[self._class] += 1
+
+
+        self.scene.addUAV(self)
 
         self.boxes=[]
         self.boxes_names = []
@@ -52,7 +59,7 @@ class UAV:
         
         self.scale(scale, fit_to_unit_sphere= (not scale))
 
-        self.scene.addUAV(self)
+        
 
         
 
@@ -75,6 +82,17 @@ class UAV:
     def move_by(self, dist:np.ndarray):
         "Move the UAV by the specified distance"
         self.move_to(self.position + dist)
+
+    def rotate(self, angle:float, axis:np.ndarray):
+        "Rotate the UAV by the specified angle around the specified axis"
+        R = get_rotation_matrix(angle, axis)
+        self.mesh.vertices = np.dot(self.mesh.vertices, R)
+        self.mesh._update(self.name, self.scene)
+
+        for box, name in zip(self.boxes, self.boxes_names):
+            if isinstance(box, Sphere3D):
+                continue
+            # Rotate boxes
 
     def scale(self, scale:float = None, fit_to_unit_sphere:bool = False):
         """
@@ -114,6 +132,7 @@ class Airspace(Scene3D):
 
     def on_key_press(self, symbol, modifiers):
         uav = self.uavs.get("v22_osprey_0")
+
         if not uav:
             return
 
@@ -140,7 +159,10 @@ class Airspace(Scene3D):
         del self.uavs[uav.name]
     
     def updateUAV(self, uav:UAV):
-        self.updateShape(uav.mesh, uav.name)
+        if uav.name not in self.uavs:
+            self.addUAV(uav)
+        else:
+            self.updateShape(uav.mesh, uav.name)
 
 
        
@@ -153,14 +175,9 @@ def main():
 
     for i,model in enumerate(models):
         uav = UAV(airspace, f"models/{model}.obj", position=[2*i, 0, 0], scale=None)
-        # uav.create_sphere(radius=None, resolution=30)
-    # uav = UAV(airspace, "models/B2_Spirit.obj", position=[0, 0, 0], scale=None)
-    
+        uav.create_sphere(radius=None, resolution=30)
 
-    # uav.create_sphere(radius=None, resolution=30)
-
-    # uav.move_to(np.array((0, 0, 1)))
-
+        
     airspace.mainLoop()
 
     
