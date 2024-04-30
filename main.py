@@ -143,7 +143,7 @@ def main():
     airspace = Airspace(1920, 1080)
 
 
-    uav = UAV(airspace, "models/v22_osprey.obj", position=[0, 0, 0], scale=None)
+    uav = UAV(airspace, "models/twin_copter.obj", position=[0, 0, 0], scale=None)
     
 
     uav.create_sphere(radius=None, resolution=30)
