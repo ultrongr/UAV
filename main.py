@@ -20,6 +20,15 @@ unlitLine = rendering.MaterialRecord()
 unlitLine.shader = "unlitLine"
 unlitLine.line_width = 5
 
+models = ["B2_Spirit",
+        "F52",
+        "fight_drone",
+        "Helicopter",
+        "quadcopter_scifi",
+        "twin_copter",
+        "v22_osprey",
+    ]
+
 
 
 
@@ -31,7 +40,7 @@ class UAV:
         
         self.mesh = Mesh3D(filename)
         self.scene = scene
-        self.name = filename.split("/")[-1].split(".")[0]+str(UAV.number_of_uavs)
+        self.name = filename.split("/")[-1].split(".")[0]+"_" + str(UAV.number_of_uavs)
         UAV.number_of_uavs += 1
 
         self.boxes=[]
@@ -104,7 +113,7 @@ class Airspace(Scene3D):
 
 
     def on_key_press(self, symbol, modifiers):
-        uav = self.uavs.get("v22_osprey0")
+        uav = self.uavs.get("v22_osprey_0")
         if not uav:
             return
 
@@ -142,13 +151,15 @@ def main():
     
     airspace = Airspace(1920, 1080)
 
-
-    uav = UAV(airspace, "models/B2_Spirit.obj", position=[0, 0, 0], scale=None)
+    for i,model in enumerate(models):
+        uav = UAV(airspace, f"models/{model}.obj", position=[2*i, 0, 0], scale=None)
+        # uav.create_sphere(radius=None, resolution=30)
+    # uav = UAV(airspace, "models/B2_Spirit.obj", position=[0, 0, 0], scale=None)
     
 
-    uav.create_sphere(radius=None, resolution=30)
+    # uav.create_sphere(radius=None, resolution=30)
 
-    uav.move_to(np.array((0, 0, 1)))
+    # uav.move_to(np.array((0, 0, 1)))
 
     airspace.mainLoop()
 
