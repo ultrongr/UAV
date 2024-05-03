@@ -60,6 +60,71 @@ class UAV:
         
         self.scale(scale, fit_to_unit_sphere= (not scale))
 
+    def create_convex_hull(self):
+        "Create a convex hull around the UAV"
+
+        def simple_hull():
+            
+            # Find one triangle that is part of the convex hull
+            faces=[]
+            for t in self.mesh.triangles:
+                p1, p2, p3 = self.mesh.vertices[t]
+                for v in self.mesh.vertices:
+                    if np.all(v == p1) or np.all(v == p2) or np.all(v == p3):
+                        continue
+                    if np.linalg.det(np.array([p2-p1, p3-p1, v-p1])) > 0:
+                        faces.append([p1, p2, p3])
+                        break
+                else:
+                    continue
+                break
+            queue = []
+            faces_points = {}
+            for face in faces:
+                for p in face:
+                    faces_points[tuple(p)] = True
+            first = faces[0]
+            queue.append((first[0], first[1]))
+            queue.append((first[1], first[2]))
+            queue.append((first[2], first[0]))
+
+
+
+            print(len(self.mesh.vertices))
+            counter=0
+            while queue:
+                
+                p1, p2 = queue.pop(0)
+                counter=0
+                for p3 in self.mesh.vertices:
+                    counter+=1
+                    if not counter%10:
+                        print(counter)
+                    if tuple(p3) in faces_points:
+                        continue
+                    if any([np.linalg.det(np.array([p2-p1, p3-p1, v-p1])) > 0 for v in self.mesh.vertices]):
+                        if any([np.linalg.det(np.array([p1-p2, p3-p2, v-p2])) > 0 for v in self.mesh.vertices]):
+                            continue
+                    
+                    faces.append([p1, p2, p3])
+                    faces_points[tuple(p3)] = True
+                    queue.append((p1, p3))
+                    queue.append((p3, p2))
+                    break
+                else:
+                    print("error")
+                    break
+            print(len(faces))
+                    
+
+
+        hull = []
+        import time
+        start = time.time()
+        simple_hull()
+        print(f"Simple hull: {time.time()-start:.2f}s")
+
+
         
 
         
@@ -161,6 +226,15 @@ class Airspace(Scene3D):
                 filename = f"models/{model}.obj"
                 uav = UAV(self, filename, position=[2*i+1, 1, 2*j+1], scale=None)
                 # uav.create_sphere(radius=None, resolution=30)
+        # self.uavs["v22_osprey_0"].create_convex_hull()
+        simplest_uav =None
+        for uav in self.uavs.values():
+            if not simplest_uav:
+                simplest_uav = uav
+            else:
+                if len(uav.mesh.vertices) < len(simplest_uav.mesh.vertices):
+                    simplest_uav = uav
+        simplest_uav.create_convex_hull()
     
 
 
