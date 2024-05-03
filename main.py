@@ -45,6 +45,7 @@ class UAV:
         if not self._class in UAV.classes:
             UAV.classes[self._class] = 0
         self.name = f"{self._class}_{UAV.classes[self._class]}"
+        print(self.name)
         UAV.classes[self._class] += 1
 
 
@@ -118,16 +119,52 @@ class UAV:
         self.boxes.append(sphere)
         self.boxes_names.append(self.name+"_sphere")
 
-        
+
+class LandingPad:
+    def __init__(self, N:int, scene:Scene3D) -> None:
+
+        self.N=N
+        self.scene = scene
+
+        self.pads = []
+        self.create()
+    
+    def create(self):
+        colors = [Color.RED, Color.GREEN, Color.BLUE, Color.YELLOW, Color.ORANGE, Color.MAGENTA]
+        for i in range(self.N):
+            pads= []
+            for j in range(self.N):
+                color = colors[(i+j)%len(colors)]
+                pad = Cuboid3D(p1=[2*i, 0, 2*j], p2=[2*i+2, -0.1, 2*j+2], color=color, filled = True)
+                self.scene.addShape(pad, f"landing_pad_{i}_{j}")
+                pads.append(pad)
+            self.pads.append(pads)
+        self.pads = np.array(self.pads)
+            
     
 
 
 
 class Airspace(Scene3D):
 
-    def __init__(self, width, height, window_name="UAV"):
+    def __init__(self, width, height, N, window_name="UAV"):
         super().__init__(width, height, window_name)
         self.uavs = {}
+        self.N = N
+        self.landing_pad = LandingPad(N, self)
+        self.create_uavs()
+
+    def create_uavs(self):
+        for i in range(self.N):
+            for j in range(self.N):
+                model = models[(i+j)%len(models)]
+                filename = f"models/{model}.obj"
+                uav = UAV(self, filename, position=[2*i+1, 1, 2*j+1], scale=None)
+                # uav.create_sphere(radius=None, resolution=30)
+    
+
+
+
 
 
     def on_key_press(self, symbol, modifiers):
@@ -170,12 +207,17 @@ class Airspace(Scene3D):
             
 
 def main():
-    
-    airspace = Airspace(1920, 1080)
 
-    for i,model in enumerate(models):
-        uav = UAV(airspace, f"models/{model}.obj", position=[2*i, 0, 0], scale=None)
-        uav.create_sphere(radius=None, resolution=30)
+    N = 5
+    
+    airspace = Airspace(1920, 1080, N = 5)
+
+    # for i,model in enumerate(models):
+    #     uav = UAV(airspace, f"models/{model}.obj", position=[2*i, 1, 0], scale=None)
+    #     # uav.create_sphere(radius=None, resolution=30)
+    
+    # landing_pad = LandingPad(N, airspace)
+
 
         
     airspace.mainLoop()
