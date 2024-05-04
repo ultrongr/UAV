@@ -1,4 +1,5 @@
 import open3d as o3d
+import open3d.geometry as o3dg
 import open3d.visualization.gui as gui # type: ignore
 import open3d.visualization.rendering as rendering # type: ignore
 from open3d.visualization.gui import MouseEvent, KeyEvent # type: ignore
@@ -62,6 +63,7 @@ class UAV:
 
     def create_convex_hull(self):
         "Create a convex hull around the UAV"
+        # return
 
         def simple_hull():
             
@@ -121,7 +123,19 @@ class UAV:
         hull = []
         import time
         start = time.time()
-        simple_hull()
+        # hull = o3dg.compute_point_cloud_convex_hull()#o3d.geometry.PointCloud(o3d.utility.Vector3dVector(self.mesh.vertices)))
+        # hull = o3d.geometry.compute_point_cloud_convex_hull(o3d.geometry.PointCloud(o3d.utility.Vector3dVector(self.mesh.vertices)))
+        # hull = o3d.geometry.compute_mesh_convex_hull(self.mesh)
+        # hull, _ = self.mesh.compute_convex_hull()
+        triangle_mesh = o3d.geometry.TriangleMesh()
+        triangle_mesh.vertices = o3d.utility.Vector3dVector(self.mesh.vertices)
+        triangle_mesh.triangles = o3d.utility.Vector3iVector(self.mesh.triangles)
+        hull, _ = triangle_mesh.compute_convex_hull()
+        print(type(hull))
+        hull_mesh = Mesh3D()
+        hull_mesh._shape.vertices=o3d.utility.Vector3dVector(hull.vertices)
+        hull_mesh._shape.triangles=o3d.utility.Vector3iVector(hull.triangles)
+        self.scene.addShape(hull_mesh, self.name+"_hull")
         print(f"Simple hull: {time.time()-start:.2f}s")
 
 
@@ -226,15 +240,7 @@ class Airspace(Scene3D):
                 filename = f"models/{model}.obj"
                 uav = UAV(self, filename, position=[2*i+1, 1, 2*j+1], scale=None)
                 # uav.create_sphere(radius=None, resolution=30)
-        # self.uavs["v22_osprey_0"].create_convex_hull()
-        simplest_uav =None
-        for uav in self.uavs.values():
-            if not simplest_uav:
-                simplest_uav = uav
-            else:
-                if len(uav.mesh.vertices) < len(simplest_uav.mesh.vertices):
-                    simplest_uav = uav
-        simplest_uav.create_convex_hull()
+        self.uavs["v22_osprey_0"].create_convex_hull()
     
 
 
