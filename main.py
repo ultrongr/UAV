@@ -56,6 +56,7 @@ class UAV:
             "aabb": None,
             "chull": None,
             "sphere": None,
+            "kdop": None,
         }
 
         self.position = np.mean(self.mesh.vertices, axis=0)
@@ -84,6 +85,66 @@ class UAV:
                 continue
                 
         
+    def move_to(self, position:np.ndarray):
+        "Move the UAV to the specified position"
+        dist = position - self.position
+        self.mesh.vertices += dist
+        self.position = position
+        self.mesh._update(self.name, self.scene)
+
+    
+    def move_by(self, dist:np.ndarray):
+        "Move the UAV by the specified distance"
+        self.move_to(self.position + dist)
+
+    def rotate(self, angle:float, axis:np.ndarray):
+        "Rotate the UAV by the specified angle around the specified axis"
+        R = get_rotation_matrix(angle, axis)
+        self.mesh.vertices = np.dot(self.mesh.vertices, R)
+        self.mesh._update(self.name, self.scene)
+
+
+
+    def scale(self, scale:float = None, fit_to_unit_sphere:bool = False):
+        """
+        Scale the UAV by the specified factor.
+        If fit_to_unit_sphere is True, the UAV is scaled such that it fits inside a unit sphere
+        """
+
+        if fit_to_unit_sphere:
+            self.mesh.vertices -= self.position
+            self.mesh.vertices /= np.max(np.linalg.norm(self.mesh.vertices, axis=1))
+            self.mesh.vertices += self.position
+            self.mesh._update(self.name, self.scene)
+            return
+        self.mesh.vertices *= scale
+        self.mesh._update(self.name, self.scene)
+    
+    def create_sphere(self, radius:float, resolution:int):
+        "Create a sphere around the UAV with the specified radius and resolution"
+        if not radius:
+            radius = np.max(np.linalg.norm(self.mesh.vertices - self.position, axis=1))
+        sphere = Sphere3D(p=self.position, radius=radius, resolution=resolution)
+        self.scene.addShape(sphere, self.name+"_sphere")
+        self.boxes["sphere"] = sphere
+    
+    def remove_sphere(self):
+        self.scene.removeShape(self.name+"_sphere")
+        self.boxes["sphere"] = None
+
+    def create_aabb(self):
+        "Create an axis-aligned bounding box around the UAV"
+
+
+        min_x, min_y, min_z = np.min(self.mesh.vertices, axis=0)
+        max_x, max_y, max_z = np.max(self.mesh.vertices, axis=0)
+        box = Cuboid3D(p1=[min_x, min_y, min_z], p2=[max_x, max_y, max_z], color=Color.GREEN, filled=False)
+        self.scene.addShape(box, self.name+"_aabb")
+        self.boxes["aabb"] = box
+    
+    def remove_aabb(self):
+        self.scene.removeShape(self.name+"_aabb")
+        self.boxes["aabb"] = None
 
     def create_convex_hull(self):
         "Create a convex hull around the UAV"
@@ -159,67 +220,139 @@ class UAV:
         self.scene.removeShape(self.name+"_chull")
         self.boxes["chull"] = None
     
-    def move_to(self, position:np.ndarray):
-        "Move the UAV to the specified position"
-        dist = position - self.position
-        self.mesh.vertices += dist
-        self.position = position
-        self.mesh._update(self.name, self.scene)
-
-    
-    def move_by(self, dist:np.ndarray):
-        "Move the UAV by the specified distance"
-        self.move_to(self.position + dist)
-
-    def rotate(self, angle:float, axis:np.ndarray):
-        "Rotate the UAV by the specified angle around the specified axis"
-        R = get_rotation_matrix(angle, axis)
-        self.mesh.vertices = np.dot(self.mesh.vertices, R)
-        self.mesh._update(self.name, self.scene)
-
-
-
-    def scale(self, scale:float = None, fit_to_unit_sphere:bool = False):
-        """
-        Scale the UAV by the specified factor.
-        If fit_to_unit_sphere is True, the UAV is scaled such that it fits inside a unit sphere
-        """
-
-        if fit_to_unit_sphere:
-            self.mesh.vertices -= self.position
-            self.mesh.vertices /= np.max(np.linalg.norm(self.mesh.vertices, axis=1))
-            self.mesh.vertices += self.position
-            self.mesh._update(self.name, self.scene)
+    def create_kdop(self, k:int):
+        "Create a k-dop around the UAV"
+        
+        implemented_values = [6, 14, 26]
+        if k not in implemented_values:
+            print(f"Only {implemented_values} are implemented")
             return
-        self.mesh.vertices *= scale
-        self.mesh._update(self.name, self.scene)
+        if k == 6:
+            self.create_6dop()
+            return
+        
+        if k == 6:
+            directions = [
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [-1, 0, 0],
+                [0, -1, 0],
+                [0, 0, -1],
+            ]
+        elif k == 14:
+            directions = [
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [-1, 0, 0],
+                [0, -1, 0],
+                [0, 0, -1],
+                [1, 1, 1],
+                [1, 1, -1],
+                [1, -1, 1],
+                [1, -1, -1],
+                [-1, 1, 1],
+                [-1, 1, -1],
+                [-1, -1, 1],
+                [-1, -1, -1]
+            ]
+        elif k==26:
+            directions = [
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [-1, 0, 0],
+                [0, -1, 0],
+                [0, 0, -1],
+                [1, 1, 1],
+                [1, 1, -1],
+                [1, -1, 1],
+                [1, -1, -1],
+                [-1, 1, 1],
+                [-1, 1, -1],
+                [-1, -1, 1],
+                [-1, -1, -1],
+                [1, 1, 0],
+                [1, -1, 0],
+                [1, 0, 1],
+                [1, 0, -1],
+                [0, 1, 1],
+                [0, 1, -1],
+                [-1, 1, 0],
+                [-1, -1, 0],
+                [0, -1, 1],
+                [0, -1, -1],
+                [-1, 0, 1],
+                [-1, 0, -1],
+            ]
+        
+        edge_points = []
+        
+        for direction in directions:
+            max_val = -np.inf
+            max_vertex = None
+            min_val = np.inf
+            min_vertex = None
+            for vertex in self.mesh.vertices:
+                val = np.dot(vertex, direction)
+                if val > max_val:
+                    max_val = val
+                    max_vertex = vertex
+                if val < min_val:
+                    min_val = val
+                    min_vertex = vertex
+            edge_points.append(min_vertex)
+            edge_points.append(max_vertex)
     
-    def create_sphere(self, radius:float, resolution:int):
-        "Create a sphere around the UAV with the specified radius and resolution"
-        if not radius:
-            radius = np.max(np.linalg.norm(self.mesh.vertices - self.position, axis=1))
-        sphere = Sphere3D(p=self.position, radius=radius, resolution=resolution)
-        self.scene.addShape(sphere, self.name+"_sphere")
-        self.boxes["sphere"] = sphere
-    
-    def remove_sphere(self):
-        self.scene.removeShape(self.name+"_sphere")
-        self.boxes["sphere"] = None
 
-    def create_aabb(self):
-        "Create an axis-aligned bounding box around the UAV"
+    def create_6dop(self):
+
+        directions = [
+            [1, 0, 0],
+            [0, 1, 0],
+            [0, 0, 1],
+            [-1, 0, 0],
+            [0, -1, 0],
+            [0, 0, -1],
+        ]
+
+        edge_points = []
+        direction_edge_vertex = {}
+        for direction in directions:
+            max_val = -np.inf
+            max_vertex = None
+            for vertex in self.mesh.vertices:
+                val = np.dot(vertex, direction)
+                if val > max_val:
+                    max_val = val
+                    max_vertex = vertex
+            
+            direction_edge_vertex[tuple(direction)] = max_vertex
+        
+        dop_points = []
+        dop_triangles = []
+        for dir in direction_edge_vertex.keys():
+            for dir2 in direction_edge_vertex.keys():
+                if np.all(np.abs(np.array(dir) + np.array(dir2)) == 1):
+                    # Find the edge defined by the intersection of the two planes defined by the two directions 
+                    # at the height of the vertices
+                    v1 = direction_edge_vertex[dir]
+                    v2 = direction_edge_vertex[dir2]
+                    plane1 = []
 
 
-        min_x, min_y, min_z = np.min(self.mesh.vertices, axis=0)
-        max_x, max_y, max_z = np.max(self.mesh.vertices, axis=0)
-        box = Cuboid3D(p1=[min_x, min_y, min_z], p2=[max_x, max_y, max_z], color=Color.GREEN, filled=False)
-        self.scene.addShape(box, self.name+"_aabb")
-        self.boxes["aabb"] = box
-    
-    def remove_aabb(self):
-        self.scene.removeShape(self.name+"_aabb")
-        self.boxes["aabb"] = None
 
+                    
+
+        
+        
+                
+
+
+    def remove_kdop(self):
+        self.scene.removeShape(self.name+"_kdop")
+        self.boxes["kdop"] = None
 
 class LandingPad:
     def __init__(self, N:int, scene:Scene3D) -> None:
@@ -309,6 +442,13 @@ class Airspace(Scene3D):
                     uav.remove_aabb()
                 else:
                     uav.create_aabb()
+        
+        if symbol == Key.K:
+            for uav in self.uavs.values():
+                if uav.boxes["kdop"]:
+                    uav.remove_kdop()
+                else:
+                    uav.create_kdop(6)
 
     
     def addUAV(self, uav:UAV):
