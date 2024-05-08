@@ -1,5 +1,5 @@
 import open3d as o3d
-import open3d.geometry as o3dg
+import open3d.geometry as o3dg # type: ignore
 import open3d.visualization.gui as gui # type: ignore
 import open3d.visualization.rendering as rendering # type: ignore
 from open3d.visualization.gui import MouseEvent, KeyEvent # type: ignore
@@ -52,8 +52,11 @@ class UAV:
 
         self.scene.addUAV(self)
 
-        self.boxes=[]
-        self.boxes_names = []
+        self.boxes = {
+            "aabb": None,
+            "chull": None,
+            "sphere": None,
+        }
 
         self.position = np.mean(self.mesh.vertices, axis=0)
         if position:            
@@ -61,9 +64,30 @@ class UAV:
         
         self.scale(scale, fit_to_unit_sphere= (not scale))
 
+
+    def update_boxes(self):
+        create_methods_dict = {
+            "aabb": self.create_aabb,
+            "chull": self.create_convex_hull,
+            "sphere": self.create_sphere,
+        }
+        remove_methods_dict = {
+            "aabb": self.remove_aabb,
+            "chull": self.remove_convex_hull,
+            "sphere": self.remove_sphere,
+        }
+        for box_name in self.boxes.keys():
+            if box_name:
+                self.scene.removeShape(self.name+"_"+box_name)
+                create_methods_dict[box_name]()
+            else:
+                continue
+                
+        
+
     def create_convex_hull(self):
         "Create a convex hull around the UAV"
-        # return
+
 
         def simple_hull():
             
@@ -92,7 +116,6 @@ class UAV:
 
 
 
-            print(len(self.mesh.vertices))
             counter=0
             while queue:
                 
@@ -100,8 +123,6 @@ class UAV:
                 counter=0
                 for p3 in self.mesh.vertices:
                     counter+=1
-                    if not counter%10:
-                        print(counter)
                     if tuple(p3) in faces_points:
                         continue
                     if any([np.linalg.det(np.array([p2-p1, p3-p1, v-p1])) > 0 for v in self.mesh.vertices]):
@@ -123,30 +144,20 @@ class UAV:
         hull = []
         import time
         start = time.time()
-        # hull = o3dg.compute_point_cloud_convex_hull()#o3d.geometry.PointCloud(o3d.utility.Vector3dVector(self.mesh.vertices)))
-        # hull = o3d.geometry.compute_point_cloud_convex_hull(o3d.geometry.PointCloud(o3d.utility.Vector3dVector(self.mesh.vertices)))
-        # hull = o3d.geometry.compute_mesh_convex_hull(self.mesh)
-        # hull, _ = self.mesh.compute_convex_hull()
         triangle_mesh = o3d.geometry.TriangleMesh()
         triangle_mesh.vertices = o3d.utility.Vector3dVector(self.mesh.vertices)
         triangle_mesh.triangles = o3d.utility.Vector3iVector(self.mesh.triangles)
         hull, _ = triangle_mesh.compute_convex_hull()
-        print(type(hull))
         hull_mesh = Mesh3D()
         hull_mesh._shape.vertices=o3d.utility.Vector3dVector(hull.vertices)
         hull_mesh._shape.triangles=o3d.utility.Vector3iVector(hull.triangles)
-        self.scene.addShape(hull_mesh, self.name+"_hull")
-        print(f"Simple hull: {time.time()-start:.2f}s")
+        self.scene.addShape(hull_mesh, self.name+"_chull")
+        self.boxes["chull"] = hull_mesh
+        print(f"Hull: {time.time()-start:.2f}s")
 
-
-        
-
-        
-
-        
-
-
-        
+    def remove_convex_hull(self):
+        self.scene.removeShape(self.name+"_chull")
+        self.boxes["chull"] = None
     
     def move_to(self, position:np.ndarray):
         "Move the UAV to the specified position"
@@ -155,9 +166,6 @@ class UAV:
         self.position = position
         self.mesh._update(self.name, self.scene)
 
-        for box, name in zip(self.boxes, self.boxes_names):
-            [box.x, box.y, box.z] = self.position
-            box._update(name, self.scene)
     
     def move_by(self, dist:np.ndarray):
         "Move the UAV by the specified distance"
@@ -169,10 +177,7 @@ class UAV:
         self.mesh.vertices = np.dot(self.mesh.vertices, R)
         self.mesh._update(self.name, self.scene)
 
-        for box, name in zip(self.boxes, self.boxes_names):
-            if isinstance(box, Sphere3D):
-                continue
-            # Rotate boxes
+
 
     def scale(self, scale:float = None, fit_to_unit_sphere:bool = False):
         """
@@ -195,8 +200,25 @@ class UAV:
             radius = np.max(np.linalg.norm(self.mesh.vertices - self.position, axis=1))
         sphere = Sphere3D(p=self.position, radius=radius, resolution=resolution)
         self.scene.addShape(sphere, self.name+"_sphere")
-        self.boxes.append(sphere)
-        self.boxes_names.append(self.name+"_sphere")
+        self.boxes["sphere"] = sphere
+    
+    def remove_sphere(self):
+        self.scene.removeShape(self.name+"_sphere")
+        self.boxes["sphere"] = None
+
+    def create_aabb(self):
+        "Create an axis-aligned bounding box around the UAV"
+
+
+        min_x, min_y, min_z = np.min(self.mesh.vertices, axis=0)
+        max_x, max_y, max_z = np.max(self.mesh.vertices, axis=0)
+        box = Cuboid3D(p1=[min_x, min_y, min_z], p2=[max_x, max_y, max_z], color=Color.GREEN, filled=False)
+        self.scene.addShape(box, self.name+"_aabb")
+        self.boxes["aabb"] = box
+    
+    def remove_aabb(self):
+        self.scene.removeShape(self.name+"_aabb")
+        self.boxes["aabb"] = None
 
 
 class LandingPad:
@@ -240,7 +262,7 @@ class Airspace(Scene3D):
                 filename = f"models/{model}.obj"
                 uav = UAV(self, filename, position=[2*i+1, 1, 2*j+1], scale=None)
                 # uav.create_sphere(radius=None, resolution=30)
-        self.uavs["v22_osprey_0"].create_convex_hull()
+                uav.create_convex_hull()
     
 
 
@@ -266,6 +288,28 @@ class Airspace(Scene3D):
             uav.move_to(uav.position + np.array([0, 1, 0]))
         elif symbol == Key.BACKSPACE:
             uav.move_to(uav.position + np.array([0, -1, 0]))
+        
+        if symbol == Key.C:
+            for uav in self.uavs.values():
+                if uav.boxes["chull"]:
+                    uav.remove_convex_hull()
+                else:
+                    uav.create_convex_hull()
+        
+        if symbol == Key.U:
+            for uav in self.uavs.values():
+                if uav.boxes["sphere"]:
+                    uav.remove_sphere()
+                else:
+                    uav.create_sphere(radius=None, resolution=30)
+        
+        if symbol == Key.B:
+            for uav in self.uavs.values():
+                if uav.boxes["aabb"]:
+                    uav.remove_aabb()
+                else:
+                    uav.create_aabb()
+
     
     def addUAV(self, uav:UAV):
         self.uavs[uav.name] = uav

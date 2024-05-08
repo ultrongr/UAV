@@ -5,8 +5,8 @@ from inspect import getfullargspec
 from io import StringIO
 import numpy as np
 import open3d as o3d
-import open3d.visualization.gui as gui
-import open3d.visualization.rendering as rendering
+import open3d.visualization.gui as gui # type: ignore
+import open3d.visualization.rendering as rendering # type: ignore
 import os
 import pyglet
 
