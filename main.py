@@ -378,6 +378,7 @@ class UAV:
 
         points = []
         lines = []
+        triangles = []
         directions_to_vertices = {}
         for direction in directions:
             max_val = -np.inf
@@ -427,22 +428,32 @@ class UAV:
             # triangle._shape.vertices = o3d.utility.Vector3dVector(temp_points)
             # triangle._shape.triangles = o3d.utility.Vector3iVector([[0, 1, 2]])
             triangle = Triangle3D(p1=temp_points[0], p2=temp_points[1], p3=temp_points[2], color=Color.RED)
-            import random
-            self.scene.addShape(triangle, self.name+"_triangle"+str(random.randint(0, 1000)))
+            triangles.append(triangle)
+            self.scene.addShape(triangle, self.name+"_triangle"+str(len(triangles)-1))
             for p in temp_points:
                 print(p)
             lines.append((len(points)-1, len(points)-2))
             lines.append((len(points)-1, len(points)-3))
             lines.append((len(points)-2, len(points)-3))
 
-        for point in points:
-            print(point)
-        for line in lines:
-            print(line)
-        print("len", len(lines))
-        # lineset = LineSet3D(points=points, lines=lines, color=Color.BLUE)
-        # self.scene.addShape(lineset, self.name+"_kdop")
-        # self.boxes["kdop"] = lineset
+        # mesh_point=self.mesh.vertices[100]
+        mesh_point = np.mean(self.mesh.vertices, axis=0)
+        self.scene.addShape(Point3D(p=mesh_point, size=10, color=Color.RED), self.name+"_mesh_point")
+        points_to_remove = []
+        for p in points:
+            
+            for triangle in triangles:
+                if not triangle.points_on_same_side(mesh_point, p):
+                    points_to_remove.append(p)
+                    break
+        
+        for i,p in enumerate(points_to_remove):
+            self.scene.addShape(Point3D(p=p, size=3, color=Color.YELLOW), self.name+"_point"+str(i))
+        print("points to remove", len(points_to_remove))
+        
+
+        
+
         print(f"14DOP: {time.time()-start:.2f}s")
 
                     

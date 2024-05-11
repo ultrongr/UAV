@@ -2701,30 +2701,74 @@ class Triangle3D(Mesh3D):
         self._shape.vertices = o3d.utility.Vector3dVector([p1, p2, p3])
         self._shape.triangles = o3d.utility.Vector3iVector([[0, 1, 2]])
 
-    # @property
-    # def p1(self) -> Point3D:
-    #     '''The first point of the triangle.'''
-    #     return Point3D(self._shape.vertices[0], color=self._color)
+    @property
+    def p1(self) -> NDArray:
+        '''The first point of the triangle.'''
+        return np.copy(np.asarray(self._shape.vertices[0]))
     
     # @p1.setter
     # def p1(self, p1:Point3D):
     #     self._shape.vertices[0] = p1
 
-    # @property
-    # def p2(self) -> Point3D:
-    #     '''The second point of the triangle.'''
-    #     return Point3D(self._shape.vertices[1], color=self._color)
+    @property
+    def p2(self) -> NDArray:
+        '''The second point of the triangle.'''
+        return np.copy(np.asarray(self._shape.vertices[1]))
     
     # @p2.setter
     # def p2(self, p2:Point3D):
     #     self._shape.vertices[1] = p2
 
-    # @property
-    # def p3(self) -> Point3D:
-    #     '''The third point of the triangle.'''
-    #     return Point3D(self._shape.vertices[2], color=self._color)
+    @property
+    def p3(self) -> NDArray:
+        '''The third point of the triangle.'''
+        return np.copy(np.asarray(self._shape.vertices[2]))
     
     # @p3.setter
     # def p3(self, p3:Point3D):
     #     self._shape.vertices[2] = p3
 
+    def points_on_same_side(self, p1:NDArray, p2:NDArray): #-> bool:
+        '''Checks if two points are on the same side of the triangle.
+
+        Args:
+            p1: The first point to check.
+            p2: The second point to check.
+        
+        Returns:
+            Whether the two points are on the same side of the triangle.
+        '''
+        n = np.cross(self.p2 - self.p1, self.p3 - self.p1)
+        return np.dot(n, p1 - self.p1) * np.dot(n, p2 - self.p1) >= -0.01
+
+
+
+class ConvexPolygon3D(Mesh3D):
+    '''A class used to represent a convex polygon in 3D space. All points must be in the same plane.'''
+
+    def __init__(self, points:NDArray, color:ColorType=(0, 0, 0)):
+        '''Inits ConvexPolygon3D.
+
+        Inits a ConvexPolygon3D from a set of points.
+
+        Args:
+            points: The points of the convex polygon.
+            color: The color of the displayed polygon (RGB or RGBA).
+        '''
+        self._color = [*color, 1] if len(color) == 3 else [*color]
+        self._shape = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
+        self._material = rendering.MaterialRecord()
+        self._material.shader = "defaultLitTransparency"
+        self._material.base_color = (*color[:3], color[3] if len(color) == 4 else 1)
+
+        self._shape.vertices = o3d.utility.Vector3dVector(points)
+        self._shape.triangles = o3d.utility.Vector3iVector([[i, i+1, i+2] for i in range(len(points) - 2)])
+
+    @property
+    def points(self) -> NDArray:
+        '''The points of the convex polygon.'''
+        return np.copy(np.asarray(self._shape.vertices))
+    
+    @points.setter
+    def points(self, points:NDArray|List|Tuple):
+        self._shape.vertices = o3d.utility.Vector3dVector(points)
