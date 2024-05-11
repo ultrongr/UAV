@@ -11,7 +11,7 @@ from vvrpywork.shapes import (
     Point2D, Line2D, Triangle2D, Circle2D, Rectangle2D,
     PointSet2D, LineSet2D, Polygon2D,
     Point3D, Line3D, Arrow3D, Sphere3D, Cuboid3D, Cuboid3DGeneralized,
-    PointSet3D, LineSet3D, Mesh3D
+    PointSet3D, LineSet3D, Mesh3D, Triangle3D
 )
 
 defaultUnlit = rendering.MaterialRecord()
@@ -21,13 +21,14 @@ unlitLine = rendering.MaterialRecord()
 unlitLine.shader = "unlitLine"
 unlitLine.line_width = 5
 
-models = ["B2_Spirit",
+models = ["v22_osprey",
+        "B2_Spirit",
         "F52",
         "fight_drone",
         "Helicopter",
         "quadcopter_scifi",
         "twin_copter",
-        "v22_osprey",
+        
     ]
 
 
@@ -230,6 +231,10 @@ class UAV:
         if k == 6:
             self.create_6dop()
             return
+        if k == 14:
+            self.create_14dop()
+            return
+        
         
         if k == 6:
             directions = [
@@ -307,7 +312,51 @@ class UAV:
     
 
     def create_6dop(self):
+        "Create a 6-dop around the UAV"
 
+        min_x, min_y, min_z = np.min(self.mesh.vertices, axis=0)
+        max_x, max_y, max_z = np.max(self.mesh.vertices, axis=0)
+        box = Cuboid3D(p1=[min_x, min_y, min_z], p2=[max_x, max_y, max_z], color=Color.GREEN, filled=False)
+        self.scene.addShape(box, self.name+"_kdop")
+        self.boxes["kdop"] = box
+
+
+    def create_14dop(self):
+        "Create a 14-dop around the UAV"
+
+        import time
+
+        def find_intersection(plane1, plane2, plane3):
+            
+            A = np.array([plane1[:3], plane2[:3], plane3[:3]])
+            b = np.array([-plane1[3], -plane2[3], -plane3[3]])
+            x = np.linalg.solve(A, b)
+            return x
+
+
+
+
+        def check_if_neighbor(corner_dir, face_dir):
+            for i in range(3):
+                if face_dir[i] != 0:
+                    if corner_dir[i]==face_dir[i]:
+                        return True
+            return False
+        
+        def plane_equation_from_point_normal(point, normal):
+            # Normalize the normal vector
+            unit_normal = normal / np.linalg.norm(normal)
+            
+            # Extract components
+            a, b, c = unit_normal
+            x0, y0, z0 = point
+            
+            # Calculate d using the point on the plane
+            d = -(a*x0 + b*y0 + c*z0)
+            
+            # Return the coefficients of the plane equation
+            return [a, b, c, d]
+        
         directions = [
             [1, 0, 0],
             [0, 1, 0],
@@ -315,10 +364,21 @@ class UAV:
             [-1, 0, 0],
             [0, -1, 0],
             [0, 0, -1],
+            [1, 1, 1],
+            [1, 1, -1],
+            [1, -1, 1],
+            [1, -1, -1],
+            [-1, 1, 1],
+            [-1, 1, -1],
+            [-1, -1, 1],
+            [-1, -1, -1]
         ]
 
-        edge_points = []
-        direction_edge_vertex = {}
+        start = time.time()
+
+        points = []
+        lines = []
+        directions_to_vertices = {}
         for direction in directions:
             max_val = -np.inf
             max_vertex = None
@@ -327,20 +387,72 @@ class UAV:
                 if val > max_val:
                     max_val = val
                     max_vertex = vertex
-            
-            direction_edge_vertex[tuple(direction)] = max_vertex
+            points.append(max_vertex)
+            directions_to_vertices[tuple(direction)] = max_vertex
         
-        dop_points = []
-        dop_triangles = []
-        for dir in direction_edge_vertex.keys():
-            for dir2 in direction_edge_vertex.keys():
-                if np.all(np.abs(np.array(dir) + np.array(dir2)) == 1):
-                    # Find the edge defined by the intersection of the two planes defined by the two directions 
-                    # at the height of the vertices
-                    v1 = direction_edge_vertex[dir]
-                    v2 = direction_edge_vertex[dir2]
-                    plane1 = []
+        print("intermediate time", time.time()-start)
+        
+        for dir in directions_to_vertices.keys():
+            
+            if 0 in dir: # Only going for corners
+                continue
+            v = directions_to_vertices[dir]
+            plane = plane_equation_from_point_normal(v, dir)
+            face_planes = []
+            for dir2 in directions_to_vertices.keys():
+                if not 0 in dir2: # Only going for faces
+                    continue
+                # Check if the corner is a neighbor of the face
+                if not check_if_neighbor(dir, dir2):
+                    continue
 
+                plane2 = plane_equation_from_point_normal(directions_to_vertices[dir2], dir2)
+                face_planes.append(plane2)
+            print(face_planes)
+            temp_points=[]
+            point = None
+            for plane2 in face_planes:
+                for plane3 in face_planes:
+                    if plane2 == plane3:
+                        continue
+                    point = find_intersection(plane, plane2, plane3)
+                    for temp_p in temp_points:
+                        if np.linalg.norm(temp_p - point) < 0.01:
+                            break
+                    else:
+                        points.append(point)
+                        temp_points.append(point)
+            print(len(temp_points), "temp", )
+            # triangle = Mesh3D(None, color=Color.RED)
+            # triangle._shape.vertices = o3d.utility.Vector3dVector(temp_points)
+            # triangle._shape.triangles = o3d.utility.Vector3iVector([[0, 1, 2]])
+            triangle = Triangle3D(p1=temp_points[0], p2=temp_points[1], p3=temp_points[2], color=Color.RED)
+            import random
+            self.scene.addShape(triangle, self.name+"_triangle"+str(random.randint(0, 1000)))
+            for p in temp_points:
+                print(p)
+            lines.append((len(points)-1, len(points)-2))
+            lines.append((len(points)-1, len(points)-3))
+            lines.append((len(points)-2, len(points)-3))
+
+        for point in points:
+            print(point)
+        for line in lines:
+            print(line)
+        print("len", len(lines))
+        # lineset = LineSet3D(points=points, lines=lines, color=Color.BLUE)
+        # self.scene.addShape(lineset, self.name+"_kdop")
+        # self.boxes["kdop"] = lineset
+        print(f"14DOP: {time.time()-start:.2f}s")
+
+                    
+
+                    
+                    
+                
+                
+                
+        
 
 
                     
@@ -395,7 +507,7 @@ class Airspace(Scene3D):
                 filename = f"models/{model}.obj"
                 uav = UAV(self, filename, position=[2*i+1, 1, 2*j+1], scale=None)
                 # uav.create_sphere(radius=None, resolution=30)
-                uav.create_convex_hull()
+                # uav.create_convex_hull()
     
 
 
@@ -403,26 +515,27 @@ class Airspace(Scene3D):
 
 
     def on_key_press(self, symbol, modifiers):
-        uav = self.uavs.get("v22_osprey_0")
+        # uav = self.uavs.get("v22_osprey_0")
 
-        if not uav:
-            return
+        # if not uav:
+        #     return
 
 
-        if symbol == Key.UP:
-            uav.move_to(uav.position + np.array([0, 0, -1]))
-        elif symbol == Key.DOWN:
-            uav.move_to(uav.position + np.array([0, 0, 1]))
-        elif symbol == Key.LEFT:
-            uav.move_to(uav.position + np.array([-1, 0, 0]))
-        elif symbol == Key.RIGHT:
-            uav.move_to(uav.position + np.array([1, 0, 0]))
-        elif symbol == Key.SPACE:
-            uav.move_to(uav.position + np.array([0, 1, 0]))
-        elif symbol == Key.BACKSPACE:
-            uav.move_to(uav.position + np.array([0, -1, 0]))
+        # if symbol == Key.UP:
+        #     uav.move_to(uav.position + np.array([0, 0, -1]))
+        # elif symbol == Key.DOWN:
+        #     uav.move_to(uav.position + np.array([0, 0, 1]))
+        # elif symbol == Key.LEFT:
+        #     uav.move_to(uav.position + np.array([-1, 0, 0]))
+        # elif symbol == Key.RIGHT:
+        #     uav.move_to(uav.position + np.array([1, 0, 0]))
+        # elif symbol == Key.SPACE:
+        #     uav.move_to(uav.position + np.array([0, 1, 0]))
+        # elif symbol == Key.BACKSPACE:
+        #     uav.move_to(uav.position + np.array([0, -1, 0]))
         
         if symbol == Key.C:
+            print("c")
             for uav in self.uavs.values():
                 if uav.boxes["chull"]:
                     uav.remove_convex_hull()
@@ -448,7 +561,7 @@ class Airspace(Scene3D):
                 if uav.boxes["kdop"]:
                     uav.remove_kdop()
                 else:
-                    uav.create_kdop(6)
+                    uav.create_kdop(14)
 
     
     def addUAV(self, uav:UAV):
@@ -474,7 +587,7 @@ def main():
 
     N = 5
     
-    airspace = Airspace(1920, 1080, N = 5)
+    airspace = Airspace(1920, 1080, N = 1)
 
     # for i,model in enumerate(models):
     #     uav = UAV(airspace, f"models/{model}.obj", position=[2*i, 1, 0], scale=None)

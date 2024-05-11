@@ -2677,3 +2677,54 @@ class Mesh3D(ShapeSet):
         m.vertices = (((-1, 0, 0), (0, 1, 0), (0, 0, -1)) @ m.vertices.T).T
         m.vertex_normals = (((-1, 0, 0), (0, 1, 0), (0, 0, -1)) @ m.vertex_normals.T).T
         return m
+
+class Triangle3D(Mesh3D):
+    '''A class used to represent a triangle in 3D space.'''
+
+    def __init__(self, p1:NDArray, p2:NDArray, p3:NDArray, color:ColorType=(0, 0, 0)):
+        '''Inits Triangle3D.
+
+        Inits a Triangle3D from three points.
+
+        Args:
+            p1: The first point of the triangle.
+            p2: The second point of the triangle.
+            p3: The third point of the triangle.
+            color: The color of the displayed triangle (RGB or RGBA).
+        '''
+        self._color = [*color, 1] if len(color) == 3 else [*color]
+        self._shape = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0, 0, 0])
+        self._material = rendering.MaterialRecord()
+        self._material.shader = "defaultLitTransparency"
+        self._material.base_color = (*color[:3], color[3] if len(color) == 4 else 1)
+
+        self._shape.vertices = o3d.utility.Vector3dVector([p1, p2, p3])
+        self._shape.triangles = o3d.utility.Vector3iVector([[0, 1, 2]])
+
+    # @property
+    # def p1(self) -> Point3D:
+    #     '''The first point of the triangle.'''
+    #     return Point3D(self._shape.vertices[0], color=self._color)
+    
+    # @p1.setter
+    # def p1(self, p1:Point3D):
+    #     self._shape.vertices[0] = p1
+
+    # @property
+    # def p2(self) -> Point3D:
+    #     '''The second point of the triangle.'''
+    #     return Point3D(self._shape.vertices[1], color=self._color)
+    
+    # @p2.setter
+    # def p2(self, p2:Point3D):
+    #     self._shape.vertices[1] = p2
+
+    # @property
+    # def p3(self) -> Point3D:
+    #     '''The third point of the triangle.'''
+    #     return Point3D(self._shape.vertices[2], color=self._color)
+    
+    # @p3.setter
+    # def p3(self, p3:Point3D):
+    #     self._shape.vertices[2] = p3
+
