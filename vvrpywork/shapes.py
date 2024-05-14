@@ -1615,6 +1615,42 @@ class Line3D(Shape):
             The length of the line segment.
         '''
         return ((self._x2-self._x1)**2 + (self._y2-self._y1)**2 + (self._z2-self._z1)**2)**.5
+    
+    def intersectsLine(self, l:Line3D) -> NDArray|None:
+        '''Calculates the intersection point with another line segment.
+        
+        Args:
+            l: The other line segment.
+        
+        Returns:
+            The intersection point if the segments intersect, `None`
+                otherwise.
+        '''
+        p1 = np.array((self.x1, self.y1, self.z1))
+        p2 = np.array((self.x2, self.y2, self.z2))
+        q1 = np.array((l.x1, l.y1, l.z1))
+        q2 = np.array((l.x2, l.y2, l.z2))
+        
+        v1 = p2 - p1
+        v2 = q2 - q1
+
+        n = np.cross(v1, v2)
+
+        if np.allclose(n, [0,0,0]):
+            return None
+        
+        b = q1-p1
+        t = np.cross(b, v2) / np.dot(v1, v2)
+        u = np.cross(b, v1) / np.dot(v1, v2)
+
+        intersection_point = p1 + t*v1
+        print(t)
+        return intersection_point
+
+
+
+        
+
 
 class Arrow3D(Line3D):
     '''A class used to represent an arrow in 3D space.'''
@@ -2728,6 +2764,20 @@ class Triangle3D(Mesh3D):
     # def p3(self, p3:Point3D):
     #     self._shape.vertices[2] = p3
 
+    def __eq__(self, other:Triangle3D) :
+        return np.array_equal(self.p1, other.p1) and np.array_equal(self.p2, other.p2) and np.array_equal(self.p3, other.p3)
+    
+    def intersects(self, other:Triangle3D) :
+        '''Checks if this triangle intersects with another.
+
+        Args:
+            other: The other triangle to check for intersection.
+        
+        Returns:
+            Whether the two triangles intersect.
+        '''
+        return self.points_on_same_side(other.p1, other.p2) and self.points_on_same_side(other.p2, other.p3) and self.points_on_same_side(other.p3, other.p1)
+
     def points_on_same_side(self, p1:NDArray, p2:NDArray): #-> bool:
         '''Checks if two points are on the same side of the triangle.
 
@@ -2739,7 +2789,8 @@ class Triangle3D(Mesh3D):
             Whether the two points are on the same side of the triangle.
         '''
         n = np.cross(self.p2 - self.p1, self.p3 - self.p1)
-        return np.dot(n, p1 - self.p1) * np.dot(n, p2 - self.p1) >= -0.01
+        print("dot_mult", np.dot(n, p1 - self.p1) * np.dot(n, p2 - self.p1) )
+        return np.dot(n, p1 - self.p1) * np.dot(n, p2 - self.p1) >= -0.0001
 
 
 

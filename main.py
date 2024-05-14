@@ -440,16 +440,43 @@ class UAV:
         mesh_point = np.mean(self.mesh.vertices, axis=0)
         self.scene.addShape(Point3D(p=mesh_point, size=10, color=Color.RED), self.name+"_mesh_point")
         points_to_remove = []
+        valid_points = []
         for p in points:
             
             for triangle in triangles:
                 if not triangle.points_on_same_side(mesh_point, p):
                     points_to_remove.append(p)
                     break
+            else:
+                if len(valid_points)==18:
+                    interested = []
+
+                valid_points.append(p)
+        pass
+        for i,p in enumerate(valid_points):
+            self.scene.addShape(Point3D(p=p, size=3, color=Color.BLACK), self.name+"_point_valid"+str(i))
         
         for i,p in enumerate(points_to_remove):
-            self.scene.addShape(Point3D(p=p, size=3, color=Color.YELLOW), self.name+"_point"+str(i))
-        print("points to remove", len(points_to_remove))
+            self.scene.addShape(Point3D(p=p, size=3, color=Color.YELLOW), self.name+"_point_remove"+str(i))
+        intersections=[]
+        return
+        for triangle in triangles:
+            for other_triangle in triangles:
+                if triangle == other_triangle:
+                    continue
+                if not triangle.intersects(other_triangle):
+                    continue
+                points1=[triangle.p1, triangle.p2, triangle.p3]
+                points2=[other_triangle.p1, other_triangle.p2, other_triangle.p3]
+                lines1 = [Line3D(p1=points1[i], p2=points1[j]) for i in range(3) for j in range(i+1, 3)]
+                lines2 = [Line3D(p1=points2[i], p2=points2[j]) for i in range(3) for j in range(i+1, 3)]
+                for line1 in lines1:
+                    for line2 in lines2:
+                        intersection = line1.intersectsLine(line2) 
+                        if intersection is not None:
+                            points.append(intersection)
+                            intersections.append(intersection)
+                            self.scene.addShape(Point3D(p=intersection, size=3, color=Color.GREEN), self.name+"_intersection"+str(len(intersections)-1))
         
 
         
@@ -596,7 +623,7 @@ class Airspace(Scene3D):
 
 def main():
 
-    N = 5
+
     
     airspace = Airspace(1920, 1080, N = 1)
 
