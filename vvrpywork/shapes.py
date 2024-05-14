@@ -1314,6 +1314,9 @@ class Point3D(Shape):
         else:
             return False
 
+    def __str__(self):
+        return f"Point3D({self.x}, {self.y}, {self.z})"
+
     @property
     def x(self):
         '''The point's position on the x-axis.'''
@@ -1644,7 +1647,6 @@ class Line3D(Shape):
         u = np.cross(b, v1) / np.dot(v1, v2)
 
         intersection_point = p1 + t*v1
-        print(t)
         return intersection_point
 
 
@@ -2767,16 +2769,100 @@ class Triangle3D(Mesh3D):
     def __eq__(self, other:Triangle3D) :
         return np.array_equal(self.p1, other.p1) and np.array_equal(self.p2, other.p2) and np.array_equal(self.p3, other.p3)
     
-    def intersects(self, other:Triangle3D) :
-        '''Checks if this triangle intersects with another.
+    # def intersects(self, other:Triangle3D) :
+    #     '''Checks if this triangle intersects with another.
+
+    #     Args:
+    #         other: The other triangle to check for intersection.
+        
+    #     Returns:
+    #         Whether the two triangles intersect.
+    #     '''
+    #     return self.points_on_same_side(other.p1, other.p2) and self.points_on_same_side(other.p2, other.p3) and self.points_on_same_side(other.p3, other.p1)
+    
+    def containsPoint(self, p:NDArray):
+        '''Checks if the triangle contains a point.
 
         Args:
-            other: The other triangle to check for intersection.
+            p: The point to check for containment.
         
         Returns:
-            Whether the two triangles intersect.
+            Whether the triangle contains the point.
         '''
-        return self.points_on_same_side(other.p1, other.p2) and self.points_on_same_side(other.p2, other.p3) and self.points_on_same_side(other.p3, other.p1)
+        p0 = self.p1
+        p1 = self.p2
+        p2 = self.p3
+        v0 = [p2[0] - p0[0], p2[1] - p0[1]]
+        v1 = [p1[0] - p0[0], p1[1] - p0[1]]
+        v2 = [p[0] - p0[0], p[1] - p0[1]]
+
+        # Compute dot products
+        dot00 = v0[0] * v0[0] + v0[1] * v0[1]
+        dot01 = v0[0] * v1[0] + v0[1] * v1[1]
+        dot02 = v0[0] * v2[0] + v0[1] * v2[1]
+        dot11 = v1[0] * v1[0] + v1[1] * v1[1]
+        dot12 = v1[0] * v2[0] + v1[1] * v2[1]
+
+        # Compute barycentric coordinates
+        inv_denom = 1 / (dot00 * dot11 - dot01 * dot01)
+        u = (dot11 * dot02 - dot01 * dot12) * inv_denom
+        v = (dot00 * dot12 - dot01 * dot02) * inv_denom
+
+        # Check if point is inside triangle
+        return (u >= 0) and (v >= 0) and (u + v <= 1)
+
+
+    
+    def getLineIntersection(self, l:Line3D):
+        '''Calculates the intersection point with another line segment.
+        
+        Args:
+            l: The other line segment.
+        
+        Returns:
+            The intersection point if the segments intersect, `None`
+                otherwise.
+        '''
+
+        # Get the plane equation
+        v1 = self.p2 - self.p1
+        v2 = self.p3 - self.p1
+        normal = np.cross(v1, v2)
+        point_on_plane = self.p1
+
+        d = -np.dot(normal, point_on_plane)
+
+        plane_eq = np.concatenate((normal, [d]))
+
+        # Find the plane-line intersection point
+        line_point = np.array([l.getPointFrom().x, l.getPointFrom().y, l.getPointFrom().z])
+        line_end_point = np.array([l.getPointTo().x, l.getPointTo().y, l.getPointTo().z])
+        direction = line_end_point - line_point
+        
+        a,b,c,d = plane_eq
+        x0, y0, z0 = line_point
+        vx, vy, vz = direction
+        
+        t = (-a*x0 - b*y0 - c*z0 - d) / (a*vx + b*vy + c*vz)
+        e = 0.0001
+        if t < 0-e or t > 1 + e:
+            return None
+        else:
+            intersection = np.array([x0 + vx*t, y0 + vy*t, z0 + vz*t])
+            # Check if it is inside the triangle
+            if self.containsPoint(intersection):
+                return intersection
+        
+
+
+
+
+
+
+        
+
+
+        
 
     def points_on_same_side(self, p1:NDArray, p2:NDArray): #-> bool:
         '''Checks if two points are on the same side of the triangle.
@@ -2789,7 +2875,6 @@ class Triangle3D(Mesh3D):
             Whether the two points are on the same side of the triangle.
         '''
         n = np.cross(self.p2 - self.p1, self.p3 - self.p1)
-        print("dot_mult", np.dot(n, p1 - self.p1) * np.dot(n, p2 - self.p1) )
         return np.dot(n, p1 - self.p1) * np.dot(n, p2 - self.p1) >= -0.0001
 
 
@@ -2812,8 +2897,18 @@ class ConvexPolygon3D(Mesh3D):
         self._material.shader = "defaultLitTransparency"
         self._material.base_color = (*color[:3], color[3] if len(color) == 4 else 1)
 
-        self._shape.vertices = o3d.utility.Vector3dVector(points)
-        self._shape.triangles = o3d.utility.Vector3iVector([[i, i+1, i+2] for i in range(len(points) - 2)])
+
+        center = np.mean(points, axis=0)
+        self.center = center
+        sorted_points = sorted(points, key=lambda p: np.arctan2(p[1]-center[1], p[0]-center[0]))
+        sorted_points.insert(0, sorted_points[0])
+        self._shape.vertices = o3d.utility.Vector3dVector(sorted_points)
+
+        # self._shape.vertices = o3d.utility.Vector3dVector(points)
+        self._shape.triangles = o3d.utility.Vector3iVector([[0, i, i+1] for i in range(1, len(points))])
+
+        
+        
 
     @property
     def points(self) -> NDArray:

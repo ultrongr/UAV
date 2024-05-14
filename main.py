@@ -11,7 +11,7 @@ from vvrpywork.shapes import (
     Point2D, Line2D, Triangle2D, Circle2D, Rectangle2D,
     PointSet2D, LineSet2D, Polygon2D,
     Point3D, Line3D, Arrow3D, Sphere3D, Cuboid3D, Cuboid3DGeneralized,
-    PointSet3D, LineSet3D, Mesh3D, Triangle3D
+    PointSet3D, LineSet3D, Mesh3D, Triangle3D, ConvexPolygon3D
 )
 
 defaultUnlit = rendering.MaterialRecord()
@@ -409,7 +409,6 @@ class UAV:
 
                 plane2 = plane_equation_from_point_normal(directions_to_vertices[dir2], dir2)
                 face_planes.append(plane2)
-            print(face_planes)
             temp_points=[]
             point = None
             for plane2 in face_planes:
@@ -423,22 +422,15 @@ class UAV:
                     else:
                         points.append(point)
                         temp_points.append(point)
-            print(len(temp_points), "temp", )
-            # triangle = Mesh3D(None, color=Color.RED)
-            # triangle._shape.vertices = o3d.utility.Vector3dVector(temp_points)
-            # triangle._shape.triangles = o3d.utility.Vector3iVector([[0, 1, 2]])
             triangle = Triangle3D(p1=temp_points[0], p2=temp_points[1], p3=temp_points[2], color=Color.RED)
             triangles.append(triangle)
-            self.scene.addShape(triangle, self.name+"_triangle"+str(len(triangles)-1))
-            for p in temp_points:
-                print(p)
             lines.append((len(points)-1, len(points)-2))
             lines.append((len(points)-1, len(points)-3))
             lines.append((len(points)-2, len(points)-3))
 
         # mesh_point=self.mesh.vertices[100]
         mesh_point = np.mean(self.mesh.vertices, axis=0)
-        self.scene.addShape(Point3D(p=mesh_point, size=10, color=Color.RED), self.name+"_mesh_point")
+        # self.scene.addShape(Point3D(p=mesh_point, size=10, color=Color.RED), self.name+"_mesh_point")
         points_to_remove = []
         valid_points = []
         for p in points:
@@ -454,31 +446,64 @@ class UAV:
                 valid_points.append(p)
         pass
         for i,p in enumerate(valid_points):
-            self.scene.addShape(Point3D(p=p, size=3, color=Color.BLACK), self.name+"_point_valid"+str(i))
+            self.scene.addShape(Point3D(p=p, size=0.5, color=Color.BLACK), self.name+"_point_valid"+str(i))
         
-        for i,p in enumerate(points_to_remove):
-            self.scene.addShape(Point3D(p=p, size=3, color=Color.YELLOW), self.name+"_point_remove"+str(i))
+
+        
+        # for i,p in enumerate(points_to_remove):
+        #     self.scene.addShape(Point3D(p=p, size=3, color=Color.YELLOW), self.name+"_point_remove"+str(i))
+
+
         intersections=[]
-        return
         for triangle in triangles:
+            lines = [Line3D(triangle.p1, triangle.p2), Line3D(triangle.p2, triangle.p3), Line3D(triangle.p3, triangle.p1)] 
             for other_triangle in triangles:
                 if triangle == other_triangle:
                     continue
-                if not triangle.intersects(other_triangle):
+                
+                for line in lines:
+                    intersection = other_triangle.getLineIntersection(line)
+                    if intersection is not None:
+                        intersections.append(intersection)
+
+
+
+        for i, intersection in enumerate(intersections):        
+            self.scene.addShape(Point3D(p=intersection, size=0.5, color=Color.BLACK), self.name+"_intersection"+str(i))   
+
+        for point in intersections:
+            valid_points.append(point)
+        
+        dop_faces=[]
+        blacklist=[]
+        # for i, point in enumerate(valid_points):
+        #     for v in self.mesh.vertices:
+        #         if np.linalg.norm(v - point) < 0.001:
+        #             blacklist.append(i)
+        
+        for direction in directions:
+            dop_face_points=[]
+            v = directions_to_vertices[tuple(direction)]
+            plane = plane_equation_from_point_normal(v, direction)
+            a, b, c, d = plane
+            for i, p in enumerate(valid_points):
+                if i in blacklist:
                     continue
-                points1=[triangle.p1, triangle.p2, triangle.p3]
-                points2=[other_triangle.p1, other_triangle.p2, other_triangle.p3]
-                lines1 = [Line3D(p1=points1[i], p2=points1[j]) for i in range(3) for j in range(i+1, 3)]
-                lines2 = [Line3D(p1=points2[i], p2=points2[j]) for i in range(3) for j in range(i+1, 3)]
-                for line1 in lines1:
-                    for line2 in lines2:
-                        intersection = line1.intersectsLine(line2) 
-                        if intersection is not None:
-                            points.append(intersection)
-                            intersections.append(intersection)
-                            self.scene.addShape(Point3D(p=intersection, size=3, color=Color.GREEN), self.name+"_intersection"+str(len(intersections)-1))
+                
+                if np.abs(a*p[0] + b*p[1] + c*p[2] + d) < 0.01:
+                    dop_face_points.append(p)
+            dop_faces.append(dop_face_points)
+        
+        for i, face in enumerate(dop_faces):
+            color = Color.RED if i < 6 else Color.BLUE
+            face = np.array(face)
+            face_polygon = ConvexPolygon3D(face, color=Color.RED)
+            self.scene.addShape(face_polygon, self.name+"_face"+str(i))
+            self.scene.addShape(Point3D(face_polygon.center, size=1, color=Color.BLACK), self.name+"_face_center"+str(i))
+                
         
 
+                
         
 
         print(f"14DOP: {time.time()-start:.2f}s")
@@ -535,7 +560,7 @@ class Airspace(Scene3D):
         super().__init__(width, height, window_name)
         self.uavs = {}
         self.N = N
-        self.landing_pad = LandingPad(N, self)
+        # self.landing_pad = LandingPad(N, self)
         self.create_uavs()
 
     def create_uavs(self):
