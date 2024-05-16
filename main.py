@@ -22,12 +22,12 @@ unlitLine.shader = "unlitLine"
 unlitLine.line_width = 5
 
 models = ["v22_osprey",
-        "B2_Spirit",
         "F52",
-        "fight_drone",
         "Helicopter",
         "quadcopter_scifi",
         "twin_copter",
+        # "fight_drone", ## small kdop issue
+        # "B2_Spirit", ## small kdop issue
         
     ]
 
@@ -194,9 +194,24 @@ class UAV:
 
         min_x, min_y, min_z = np.min(self.mesh.vertices, axis=0)
         max_x, max_y, max_z = np.max(self.mesh.vertices, axis=0)
-        box = Cuboid3D(p1=[min_x, min_y, min_z], p2=[max_x, max_y, max_z], color=Color.GREEN, filled=False)
-        self.scene.addShape(box, self.name+"_kdop")
-        self.boxes["kdop"] = box
+        # box = Cuboid3D(p1=[min_x, min_y, min_z], p2=[max_x, max_y, max_z], color=Color.GREEN, filled=False)
+        # self.scene.addShape(box, self.name+"_kdop")
+        # self.boxes["kdop"] = box
+        faces = [
+            [[min_x, min_y, min_z], [max_x, min_y, min_z], [max_x, max_y, min_z], [min_x, max_y, min_z]],
+            [[min_x, min_y, min_z], [min_x, max_y, min_z], [min_x, max_y, max_z], [min_x, min_y, max_z]],
+            [[min_x, min_y, min_z], [min_x, min_y, max_z], [max_x, min_y, max_z], [max_x, min_y, min_z]],
+            [[max_x, max_y, min_z], [max_x, min_y, min_z], [max_x, min_y, max_z], [max_x, max_y, max_z]],
+            [[max_x, max_y, min_z], [max_x, max_y, max_z], [min_x, max_y, max_z], [min_x, max_y, min_z]],
+            [[max_x, max_y, max_z], [max_x, min_y, max_z], [min_x, min_y, max_z], [min_x, max_y, max_z]],
+        ]
+        polygons = []
+        for face in faces:
+            polygon = ConvexPolygon3D(np.array(face), color=Color.RED)
+            polygons.append(polygon)
+        kdop = Polyhedron3D(polygons, color=Color.RED)
+        self.scene.addShape(kdop, self.name+"_kdop")
+        self.boxes["kdop"] = kdop
 
 
     def create_14dop(self):
@@ -378,7 +393,7 @@ class UAV:
 
 
     def remove_kdop(self):
-        print("removing")
+        # print("removing")
         self.scene.removeShape(self.name+"_kdop")
         self.boxes["kdop"] = None
 
