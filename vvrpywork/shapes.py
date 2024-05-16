@@ -2844,7 +2844,7 @@ class Triangle3D(Mesh3D):
         x0, y0, z0 = line_point
         vx, vy, vz = direction
         if a*vx + b*vy + c*vz == 0:
-            return "1"
+            return None
         t = (-a*x0 - b*y0 - c*z0 - d) / (a*vx + b*vy + c*vz)
         e = 0.001
         if t < 0-e or t > 1 + e:
