@@ -2809,7 +2809,8 @@ class Triangle3D(Mesh3D):
         v = (dot00 * dot12 - dot01 * dot02) * inv_denom
 
         # Check if point is inside triangle
-        return (u >= 0) and (v >= 0) and (u + v <= 1)
+        e=0.001
+        return (u >= -e) and (v >= -e) and (u + v <= 1+e)
 
 
     
@@ -2843,9 +2844,9 @@ class Triangle3D(Mesh3D):
         x0, y0, z0 = line_point
         vx, vy, vz = direction
         if a*vx + b*vy + c*vz == 0:
-            return None
+            return "1"
         t = (-a*x0 - b*y0 - c*z0 - d) / (a*vx + b*vy + c*vz)
-        e = 0.0001
+        e = 0.001
         if t < 0-e or t > 1 + e:
             return None
         else:
@@ -2853,6 +2854,7 @@ class Triangle3D(Mesh3D):
             # Check if it is inside the triangle
             if self.containsPoint(intersection):
                 return intersection
+            
         
 
 

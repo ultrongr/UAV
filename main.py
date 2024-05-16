@@ -346,12 +346,13 @@ class UAV:
                         continue
                     point = find_intersection(plane, plane2, plane3) # Intersection of the corner with the faces
                     for temp_p in temp_points:
-                        if np.linalg.norm(temp_p - point) < 0.01: # Dont add duplicate points
+                        if np.linalg.norm(temp_p - point) < 0.001: # Dont add duplicate points
                             break
                     else:
                         points.append(point)
                         temp_points.append(point)
             triangle = Triangle3D(p1=temp_points[0], p2=temp_points[1], p3=temp_points[2], color=Color.RED)
+            
             triangles.append(triangle)
 
 
@@ -367,24 +368,45 @@ class UAV:
                 valid_points.append(p)
 
         intersections=[] # The intersections of the triangles that define the kdop
-        for triangle in triangles:
+        for ind,triangle in enumerate(triangles):
+            import random
+            # self.scene.addShape(triangle, self.name+"_triangle" + str(random.random()))
             lines = [Line3D(triangle.p1, triangle.p2), Line3D(triangle.p2, triangle.p3), Line3D(triangle.p3, triangle.p1)] 
-            for other_triangle in triangles:
+            for other_ind,other_triangle in enumerate(triangles):
                 if triangle == other_triangle:
                     continue
                 
                 for line in lines:
                     intersection = other_triangle.getLineIntersection(line)
+                    try:
+                        import random
+                        if intersection=="1":
+                            # print("hi")
+                            # arr = np.array([line.x1, line.y1, line.z1])
+                            # point = Point3D(arr, size=4, color=Color.GREEN)
+                            # self.scene.addShape(point, self.name+"_point"+str(random.random()))
+
+                            # arr = np.array([line.x2, line.y2, line.z2])
+                            # point = Point3D(arr, size=4, color=Color.GREEN)
+                            # self.scene.addShape(point, self.name+"_point01"+str(random.random()))
+                            continue
+                    except Exception as e:
+                        # print(e)
+                        pass
                     if intersection is not None:
                         intersections.append(intersection)
 
-        for point in intersections: # Now valid_points contains all the points that define the kdop
+        for i,point in enumerate(intersections): # Now valid_points contains all the points that define the kdop
             valid_points.append(point)
+            # self.scene.addShape(Point3D(point, color=Color.GREEN), self.name+"_point"+str(i))
         
         dop_faces=[]
         dop_polygons = []
+        # return
 
-        
+        for i,p in enumerate(valid_points):
+            point = Point3D(p, color=Color.GREEN)
+            # self.scene.addShape(point, self.name+"_point"+str(i))
 
         for dir_index, direction in enumerate(directions): # For each direction, find the points that are on the plane 
                                                            # defined by the direction and create a face of the kdop
@@ -394,9 +416,9 @@ class UAV:
             a, b, c, d = plane
             for i, p in enumerate(valid_points):
                 
-                if np.abs(a*p[0] + b*p[1] + c*p[2] + d) < 0.001: # Point is on the plane defined by the direction
+                if np.abs(a*p[0] + b*p[1] + c*p[2] + d) < 0.01: # Point is on the plane defined by the direction
                     for other_p in dop_face_points:
-                        if np.linalg.norm(p - other_p) < 0.001: # Point is already in the face
+                        if np.linalg.norm(p - other_p) < 0.0001: # Point is already in the face
                             break
                     else:
                         dop_face_points.append(p)
