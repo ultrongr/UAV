@@ -2842,7 +2842,8 @@ class Triangle3D(Mesh3D):
         a,b,c,d = plane_eq
         x0, y0, z0 = line_point
         vx, vy, vz = direction
-        
+        if a*vx + b*vy + c*vz == 0:
+            return None
         t = (-a*x0 - b*y0 - c*z0 - d) / (a*vx + b*vy + c*vz)
         e = 0.0001
         if t < 0-e or t > 1 + e:
@@ -2901,7 +2902,7 @@ class ConvexPolygon3D(Mesh3D):
         center = np.mean(points, axis=0)
         self.center = center
         sorted_points = sorted(points, key=lambda p: np.arctan2(p[1]-center[1], p[0]-center[0]))
-        sorted_points.insert(0, sorted_points[0])
+        sorted_points.insert(0, center)
         self._shape.vertices = o3d.utility.Vector3dVector(sorted_points)
 
         # self._shape.vertices = o3d.utility.Vector3dVector(points)

@@ -444,9 +444,8 @@ class UAV:
                     interested = []
 
                 valid_points.append(p)
-        pass
-        for i,p in enumerate(valid_points):
-            self.scene.addShape(Point3D(p=p, size=0.5, color=Color.BLACK), self.name+"_point_valid"+str(i))
+        # for i,p in enumerate(valid_points):
+        #     self.scene.addShape(Point3D(p=p, size=0.5, color=Color.BLACK), self.name+"_point_valid"+str(i))
         
 
         
@@ -468,8 +467,8 @@ class UAV:
 
 
 
-        for i, intersection in enumerate(intersections):        
-            self.scene.addShape(Point3D(p=intersection, size=0.5, color=Color.BLACK), self.name+"_intersection"+str(i))   
+        # for i, intersection in enumerate(intersections):        
+        #     self.scene.addShape(Point3D(p=intersection, size=0.5, color=Color.BLACK), self.name+"_intersection"+str(i))   
 
         for point in intersections:
             valid_points.append(point)
@@ -490,9 +489,67 @@ class UAV:
                 if i in blacklist:
                     continue
                 
-                if np.abs(a*p[0] + b*p[1] + c*p[2] + d) < 0.01:
-                    dop_face_points.append(p)
-            dop_faces.append(dop_face_points)
+                if np.abs(a*p[0] + b*p[1] + c*p[2] + d) < 0.001:
+                    for other_p in dop_face_points:
+                        if np.linalg.norm(p - other_p) < 0.001:
+                            break
+                    else:
+                        dop_face_points.append(p)
+            import random
+            def get_angle(point1, point2, point3, normal):
+                # Form vectors from the given points
+                vector1 = point1 - point2
+                vector2 = point3 - point2
+                
+                # Calculate the cross product
+                cross_product = np.cross(vector1, vector2)
+                
+                # Calculate the dot product
+                dot_product = np.dot(vector1, vector2)
+                
+                # Calculate the angle in radians
+                angle_rad = np.arctan2(np.dot(cross_product, normal), dot_product)
+                
+                # Convert angle to degrees
+                angle_deg = np.degrees(angle_rad) % 360  # Ensure the angle is within [0, 360) range
+                
+                return angle_deg
+                
+            if direction==[1, 0, 0]:
+                colors=[[1,0,0], [0,1,0], [0,0,1], [1,1,1], [0,0,0], [0,1,1]]
+                print(len(dop_face_points))
+                for i,p in enumerate(dop_face_points):
+                    self.scene.addShape(Point3D(p=p, size=0.5, color=(colors[i%len(colors)]) ), self.name+"_point"+str(i))
+                center = np.mean(dop_face_points, axis=0)
+                first_point = dop_face_points[0]
+                dop_face_points.remove(first_point)
+
+                sorted_points = sorted(dop_face_points, key=lambda x: get_angle(first_point, center, x, direction))
+                for p in sorted_points:
+                    print(get_angle(first_point, center, p, direction))
+
+                # sorted_points = sorted(dop_face_points, key=lambda x: np.arctan2(x[2]-center[2], x[0]-center[0]))
+                sorted_points.insert(0, first_point)
+                print(len(sorted_points))
+                sorted_points.insert(0, center)
+                triangles = []
+                
+                triangles.append(Triangle3D(p1=sorted_points[0], p2=sorted_points[1], p3=sorted_points[-1], color=colors[0]))
+                self.scene.addShape(triangles[-1], self.name+"_triangle00"+str(random.random()))
+                for i in range(1, len(sorted_points)-1):                    
+                    triangles.append(Triangle3D(p1=sorted_points[0], p2=sorted_points[i], p3=sorted_points[i+1], color=colors[i%len(colors)]))
+                    self.scene.addShape(triangles[-1], self.name+"_triangle"+str(i)+str(random.random()))
+                    print(i, i+1)
+                # triangles.append(Triangle3D(p1=sorted_points[0], p2=sorted_points[-1], p3=sorted_points[-2], color=colors[5]))
+                # self.scene.addShape(triangles[-1], self.name+"_triangle05"+str(random.random()))
+                # self.scene.addShape(Point3D(sorted_points[-1], size=2, color=Color.BLACK), self.name+"_point_last")
+                # self.scene.addShape(Point3D(sorted_points[-2], size=2, color=Color.WHITE), self.name+"_point_second_last")
+                
+            else:
+                dop_faces.append(dop_face_points)
+        
+        # for i,point in enumerate(valid_points):
+        #     self.scene.addShape(Point3D(p=point, size=0.5, color=Color.YELLOW), self.name+"_point"+str(i))
         
         for i, face in enumerate(dop_faces):
             color = Color.RED if i < 6 else Color.BLUE
