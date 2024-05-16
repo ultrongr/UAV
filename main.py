@@ -11,7 +11,7 @@ from vvrpywork.shapes import (
     Point2D, Line2D, Triangle2D, Circle2D, Rectangle2D,
     PointSet2D, LineSet2D, Polygon2D,
     Point3D, Line3D, Arrow3D, Sphere3D, Cuboid3D, Cuboid3DGeneralized,
-    PointSet3D, LineSet3D, Mesh3D, Triangle3D, ConvexPolygon3D
+    PointSet3D, LineSet3D, Mesh3D, Triangle3D, ConvexPolygon3D, Polyhedron3D
 )
 
 defaultUnlit = rendering.MaterialRecord()
@@ -236,80 +236,7 @@ class UAV:
             return
         
         
-        if k == 6:
-            directions = [
-                [1, 0, 0],
-                [0, 1, 0],
-                [0, 0, 1],
-                [-1, 0, 0],
-                [0, -1, 0],
-                [0, 0, -1],
-            ]
-        elif k == 14:
-            directions = [
-                [1, 0, 0],
-                [0, 1, 0],
-                [0, 0, 1],
-                [-1, 0, 0],
-                [0, -1, 0],
-                [0, 0, -1],
-                [1, 1, 1],
-                [1, 1, -1],
-                [1, -1, 1],
-                [1, -1, -1],
-                [-1, 1, 1],
-                [-1, 1, -1],
-                [-1, -1, 1],
-                [-1, -1, -1]
-            ]
-        elif k==26:
-            directions = [
-                [1, 0, 0],
-                [0, 1, 0],
-                [0, 0, 1],
-                [-1, 0, 0],
-                [0, -1, 0],
-                [0, 0, -1],
-                [1, 1, 1],
-                [1, 1, -1],
-                [1, -1, 1],
-                [1, -1, -1],
-                [-1, 1, 1],
-                [-1, 1, -1],
-                [-1, -1, 1],
-                [-1, -1, -1],
-                [1, 1, 0],
-                [1, -1, 0],
-                [1, 0, 1],
-                [1, 0, -1],
-                [0, 1, 1],
-                [0, 1, -1],
-                [-1, 1, 0],
-                [-1, -1, 0],
-                [0, -1, 1],
-                [0, -1, -1],
-                [-1, 0, 1],
-                [-1, 0, -1],
-            ]
-        
-        edge_points = []
-        
-        for direction in directions:
-            max_val = -np.inf
-            max_vertex = None
-            min_val = np.inf
-            min_vertex = None
-            for vertex in self.mesh.vertices:
-                val = np.dot(vertex, direction)
-                if val > max_val:
-                    max_val = val
-                    max_vertex = vertex
-                if val < min_val:
-                    min_val = val
-                    min_vertex = vertex
-            edge_points.append(min_vertex)
-            edge_points.append(max_vertex)
-    
+
 
     def create_6dop(self):
         "Create a 6-dop around the UAV"
@@ -332,9 +259,6 @@ class UAV:
             b = np.array([-plane1[3], -plane2[3], -plane3[3]])
             x = np.linalg.solve(A, b)
             return x
-
-
-
 
         def check_if_neighbor(corner_dir, face_dir):
             for i in range(3):
@@ -361,99 +285,88 @@ class UAV:
             [1, 0, 0],
             [0, 1, 0],
             [0, 0, 1],
-            [-1, 0, 0],
-            [0, -1, 0],
-            [0, 0, -1],
             [1, 1, 1],
             [1, 1, -1],
             [1, -1, 1],
             [1, -1, -1],
+
+            [-1, 0, 0],
+            [0, -1, 0],
+            [0, 0, -1],
             [-1, 1, 1],
             [-1, 1, -1],
             [-1, -1, 1],
-            [-1, -1, -1]
+            [-1, -1, -1],
+
         ]
 
         start = time.time()
 
         points = []
-        lines = []
-        triangles = []
-        directions_to_vertices = {}
-        for direction in directions:
+        
+        directions_to_vertices = {} # Mapping the each direction to the furthest vertex in that direction
+        for direction in directions[:7]: # The other half will be the min vertices
             max_val = -np.inf
             max_vertex = None
+            min_val = np.inf
+            min_vertex = None
             for vertex in self.mesh.vertices:
                 val = np.dot(vertex, direction)
                 if val > max_val:
                     max_val = val
                     max_vertex = vertex
-            points.append(max_vertex)
+                if val < min_val:
+                    min_val = val
+                    min_vertex = vertex
             directions_to_vertices[tuple(direction)] = max_vertex
+            directions_to_vertices[tuple(np.array(direction)*-1)] = min_vertex
         
-        print("intermediate time", time.time()-start)
-        
+
+        triangles = [] # Finding the triangles that are formed by the intersection of the corner planes with the faces
         for dir in directions_to_vertices.keys():
-            
             if 0 in dir: # Only going for corners
                 continue
-            v = directions_to_vertices[dir]
-            plane = plane_equation_from_point_normal(v, dir)
-            face_planes = []
+
+            v = directions_to_vertices[dir] # Furthest vertex in the direction
+            plane = plane_equation_from_point_normal(v, dir) # Plane equation of the corner
+            face_planes = [] # Planes of the faces that are neighbors of the corner
             for dir2 in directions_to_vertices.keys():
                 if not 0 in dir2: # Only going for faces
                     continue
                 # Check if the corner is a neighbor of the face
                 if not check_if_neighbor(dir, dir2):
                     continue
-
                 plane2 = plane_equation_from_point_normal(directions_to_vertices[dir2], dir2)
                 face_planes.append(plane2)
-            temp_points=[]
-            point = None
+
+            temp_points=[] # To avoid duplicate points
             for plane2 in face_planes:
                 for plane3 in face_planes:
                     if plane2 == plane3:
                         continue
-                    point = find_intersection(plane, plane2, plane3)
+                    point = find_intersection(plane, plane2, plane3) # Intersection of the corner with the faces
                     for temp_p in temp_points:
-                        if np.linalg.norm(temp_p - point) < 0.01:
+                        if np.linalg.norm(temp_p - point) < 0.01: # Dont add duplicate points
                             break
                     else:
                         points.append(point)
                         temp_points.append(point)
             triangle = Triangle3D(p1=temp_points[0], p2=temp_points[1], p3=temp_points[2], color=Color.RED)
             triangles.append(triangle)
-            lines.append((len(points)-1, len(points)-2))
-            lines.append((len(points)-1, len(points)-3))
-            lines.append((len(points)-2, len(points)-3))
 
-        # mesh_point=self.mesh.vertices[100]
-        mesh_point = np.mean(self.mesh.vertices, axis=0)
-        # self.scene.addShape(Point3D(p=mesh_point, size=10, color=Color.RED), self.name+"_mesh_point")
-        points_to_remove = []
-        valid_points = []
-        for p in points:
-            
+
+        mesh_point = np.mean(self.mesh.vertices, axis=0) # The center of the mesh, used to check if other points are inside the kdop
+        points_to_remove = [] # Points of the triangles that are not inside the kdop
+        valid_points = [] # Points that are inside the kdop
+        for p in points:            
             for triangle in triangles:
-                if not triangle.points_on_same_side(mesh_point, p):
+                if not triangle.points_on_same_side(mesh_point, p): # Check if the point is inside the kdop
                     points_to_remove.append(p)
                     break
             else:
-                if len(valid_points)==18:
-                    interested = []
-
                 valid_points.append(p)
-        # for i,p in enumerate(valid_points):
-        #     self.scene.addShape(Point3D(p=p, size=0.5, color=Color.BLACK), self.name+"_point_valid"+str(i))
-        
 
-        
-        # for i,p in enumerate(points_to_remove):
-        #     self.scene.addShape(Point3D(p=p, size=3, color=Color.YELLOW), self.name+"_point_remove"+str(i))
-
-
-        intersections=[]
+        intersections=[] # The intersections of the triangles that define the kdop
         for triangle in triangles:
             lines = [Line3D(triangle.p1, triangle.p2), Line3D(triangle.p2, triangle.p3), Line3D(triangle.p3, triangle.p1)] 
             for other_triangle in triangles:
@@ -465,103 +378,39 @@ class UAV:
                     if intersection is not None:
                         intersections.append(intersection)
 
-
-
-        # for i, intersection in enumerate(intersections):        
-        #     self.scene.addShape(Point3D(p=intersection, size=0.5, color=Color.BLACK), self.name+"_intersection"+str(i))   
-
-        for point in intersections:
+        for point in intersections: # Now valid_points contains all the points that define the kdop
             valid_points.append(point)
         
         dop_faces=[]
-        blacklist=[]
-        # for i, point in enumerate(valid_points):
-        #     for v in self.mesh.vertices:
-        #         if np.linalg.norm(v - point) < 0.001:
-        #             blacklist.append(i)
+        dop_polygons = []
+
         
-        for dir_index, direction in enumerate(directions):
+
+        for dir_index, direction in enumerate(directions): # For each direction, find the points that are on the plane 
+                                                           # defined by the direction and create a face of the kdop
             dop_face_points=[]
             v = directions_to_vertices[tuple(direction)]
             plane = plane_equation_from_point_normal(v, direction)
             a, b, c, d = plane
             for i, p in enumerate(valid_points):
-                if i in blacklist:
-                    continue
                 
-                if np.abs(a*p[0] + b*p[1] + c*p[2] + d) < 0.001:
+                if np.abs(a*p[0] + b*p[1] + c*p[2] + d) < 0.001: # Point is on the plane defined by the direction
                     for other_p in dop_face_points:
-                        if np.linalg.norm(p - other_p) < 0.001:
+                        if np.linalg.norm(p - other_p) < 0.001: # Point is already in the face
                             break
                     else:
                         dop_face_points.append(p)
-            import random
-            def get_angle(point1, point2, point3, normal):
-                # Form vectors from the given points
-                vector1 = point1 - point2
-                vector2 = point3 - point2
-                
-                # Calculate the cross product
-                cross_product = np.cross(vector1, vector2)
-                
-                # Calculate the dot product
-                dot_product = np.dot(vector1, vector2)
-                
-                # Calculate the angle in radians
-                angle_rad = np.arctan2(np.dot(cross_product, normal), dot_product)
-                
-                # Convert angle to degrees
-                angle_deg = np.degrees(angle_rad) % 360  # Ensure the angle is within [0, 360) range
-                
-                return angle_deg
-                
-            if False:
-                colors=[[1,0,0], [0,1,0], [0,0,1], [1,1,1], [0,0,0], [0,1,1]]
-                print(len(dop_face_points))
-                for i,p in enumerate(dop_face_points):
-                    self.scene.addShape(Point3D(p=p, size=0.5, color=(colors[i%len(colors)]) ), self.name+"_point"+str(i))
-                center = np.mean(dop_face_points, axis=0)
-                first_point = dop_face_points[0]
-                dop_face_points.remove(first_point)
 
-                sorted_points = sorted(dop_face_points, key=lambda x: get_angle(first_point, center, x, direction))
-                for p in sorted_points:
-                    print(get_angle(first_point, center, p, direction))
 
-                # sorted_points = sorted(dop_face_points, key=lambda x: np.arctan2(x[2]-center[2], x[0]-center[0]))
-                sorted_points.insert(0, first_point)
-                print(len(sorted_points))
-                sorted_points.insert(0, center)
-                triangles = []
-                
-                triangles.append(Triangle3D(p1=sorted_points[0], p2=sorted_points[1], p3=sorted_points[-1], color=colors[0]))
-                self.scene.addShape(triangles[-1], self.name+"_triangle00"+str(random.random()))
-                for i in range(1, len(sorted_points)-1):                    
-                    triangles.append(Triangle3D(p1=sorted_points[0], p2=sorted_points[i], p3=sorted_points[i+1], color=colors[i%len(colors)]))
-                    self.scene.addShape(triangles[-1], self.name+"_triangle"+str(i)+str(random.random()))
-                    print(i, i+1)
-                # triangles.append(Triangle3D(p1=sorted_points[0], p2=sorted_points[-1], p3=sorted_points[-2], color=colors[5]))
-                # self.scene.addShape(triangles[-1], self.name+"_triangle05"+str(random.random()))
-                # self.scene.addShape(Point3D(sorted_points[-1], size=2, color=Color.BLACK), self.name+"_point_last")
-                # self.scene.addShape(Point3D(sorted_points[-2], size=2, color=Color.WHITE), self.name+"_point_second_last")
-                
-            else:
-                dop_faces.append(dop_face_points)
-                dop_face_points=np.array(dop_face_points)
-                face_polygon = ConvexPolygon3D(dop_face_points, normal=direction,color=Color.RED)
-                self.scene.addShape(face_polygon, self.name+"_face"+str(dir_index))
+          
+            dop_faces.append(dop_face_points)
+            dop_face_points=np.array(dop_face_points)
+            face_polygon = ConvexPolygon3D(dop_face_points, normal=direction,color=Color.RED) # The dace of the kdop corresponding to the direction
+            dop_polygons.append(face_polygon)
         
-        # for i,point in enumerate(valid_points):
-        #     self.scene.addShape(Point3D(p=point, size=0.5, color=Color.YELLOW), self.name+"_point"+str(i))
-        
-        # for i, face in enumerate(dop_faces):
-        #     color = Color.RED if i < 6 else Color.BLUE
-        #     face = np.array(face)
-        #     face_polygon = ConvexPolygon3D(face, color=Color.RED)
-        #     self.scene.addShape(face_polygon, self.name+"_face"+str(i))
-        #     self.scene.addShape(Point3D(face_polygon.center, size=1, color=Color.BLACK), self.name+"_face_center"+str(i))
-                
-        
+        kdop = Polyhedron3D(dop_polygons, color=Color.RED) # The kdop
+        self.scene.addShape(kdop, self.name+"_kdop")
+        self.boxes["kdop"] = kdop
 
                 
         
@@ -569,23 +418,12 @@ class UAV:
         print(f"14DOP: {time.time()-start:.2f}s")
 
                     
-
-                    
-                    
-                
-                
-                
-        
-
-
-                    
-
-        
         
                 
 
 
     def remove_kdop(self):
+        print("removing")
         self.scene.removeShape(self.name+"_kdop")
         self.boxes["kdop"] = None
 
@@ -638,25 +476,7 @@ class Airspace(Scene3D):
 
 
     def on_key_press(self, symbol, modifiers):
-        # uav = self.uavs.get("v22_osprey_0")
 
-        # if not uav:
-        #     return
-
-
-        # if symbol == Key.UP:
-        #     uav.move_to(uav.position + np.array([0, 0, -1]))
-        # elif symbol == Key.DOWN:
-        #     uav.move_to(uav.position + np.array([0, 0, 1]))
-        # elif symbol == Key.LEFT:
-        #     uav.move_to(uav.position + np.array([-1, 0, 0]))
-        # elif symbol == Key.RIGHT:
-        #     uav.move_to(uav.position + np.array([1, 0, 0]))
-        # elif symbol == Key.SPACE:
-        #     uav.move_to(uav.position + np.array([0, 1, 0]))
-        # elif symbol == Key.BACKSPACE:
-        #     uav.move_to(uav.position + np.array([0, -1, 0]))
-        
         if symbol == Key.C:
             print("c")
             for uav in self.uavs.values():

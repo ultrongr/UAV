@@ -2953,12 +2953,7 @@ class ConvexPolygon3D(Mesh3D):
         points.remove(first_point)
 
         sorted_points = sorted(points, key=lambda x: get_angle(first_point, center, x))
-        # for p in sorted_points:
-        #     print(get_angle(first_point, center, p))
-
-        # sorted_points = sorted(dop_face_points, key=lambda x: np.arctan2(x[2]-center[2], x[0]-center[0]))
         sorted_points.insert(0, first_point)
-        print(len(sorted_points))
         sorted_points.insert(0, center)
         return np.array(sorted_points)
         
@@ -2971,3 +2966,48 @@ class ConvexPolygon3D(Mesh3D):
     @points.setter
     def points(self, points:NDArray|List|Tuple):
         self._shape.vertices = o3d.utility.Vector3dVector(points)
+
+
+class Polyhedron3D(Mesh3D):
+    def __init__(self, faces:list[ConvexPolygon3D]|NDArray, color:ColorType=(0, 0, 0)):
+        self._color = [*color, 1] if len(color) == 3 else [*color]
+        self._polygons = []
+        self._shape = o3d.geometry.TriangleMesh()
+        self._material = rendering.MaterialRecord()
+        self._material.shader = "defaultLitTransparency"
+        self._material.base_color = (*color[:3], color[3] if len(color) == 4 else 1)
+
+        _vertices=[]
+        _triangles=[]
+
+        for face in faces:
+            self._polygons.append(face)
+
+            number_of_vertices=len(_vertices)
+            _vertices.extend(face.vertices)
+
+            face_triangles = face.triangles
+            for triangle in face_triangles:
+                _triangles.append(np.array([i+number_of_vertices for i in triangle]))
+
+        self._shape.vertices = o3d.utility.Vector3dVector(_vertices)
+        self._shape.triangles = o3d.utility.Vector3iVector(_triangles)
+    
+    @property
+    def vertices(self) -> NDArray:
+        '''The vertices of the mesh.'''
+        return np.copy(np.asarray(self._shape.vertices))
+    
+    @vertices.setter
+    def vertices(self, vertices:NDArray|List|Tuple):
+        self._shape.vertices = o3d.utility.Vector3dVector(vertices)
+
+    @property
+    def triangles(self) -> NDArray:
+        '''The triangles (as indices to `points`) of the mesh.'''
+        return np.copy(np.asarray(self._shape.triangles))
+    
+    @triangles.setter
+    def triangles(self, triangles:NDArray|List|Tuple):
+        self._shape.triangles = o3d.utility.Vector3iVector(triangles)
+
