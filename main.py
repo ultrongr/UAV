@@ -480,7 +480,7 @@ class UAV:
         #         if np.linalg.norm(v - point) < 0.001:
         #             blacklist.append(i)
         
-        for direction in directions:
+        for dir_index, direction in enumerate(directions):
             dop_face_points=[]
             v = directions_to_vertices[tuple(direction)]
             plane = plane_equation_from_point_normal(v, direction)
@@ -515,7 +515,7 @@ class UAV:
                 
                 return angle_deg
                 
-            if direction==[1, 0, 0]:
+            if False:
                 colors=[[1,0,0], [0,1,0], [0,0,1], [1,1,1], [0,0,0], [0,1,1]]
                 print(len(dop_face_points))
                 for i,p in enumerate(dop_face_points):
@@ -547,16 +547,19 @@ class UAV:
                 
             else:
                 dop_faces.append(dop_face_points)
+                dop_face_points=np.array(dop_face_points)
+                face_polygon = ConvexPolygon3D(dop_face_points, normal=direction,color=Color.RED)
+                self.scene.addShape(face_polygon, self.name+"_face"+str(dir_index))
         
         # for i,point in enumerate(valid_points):
         #     self.scene.addShape(Point3D(p=point, size=0.5, color=Color.YELLOW), self.name+"_point"+str(i))
         
-        for i, face in enumerate(dop_faces):
-            color = Color.RED if i < 6 else Color.BLUE
-            face = np.array(face)
-            face_polygon = ConvexPolygon3D(face, color=Color.RED)
-            self.scene.addShape(face_polygon, self.name+"_face"+str(i))
-            self.scene.addShape(Point3D(face_polygon.center, size=1, color=Color.BLACK), self.name+"_face_center"+str(i))
+        # for i, face in enumerate(dop_faces):
+        #     color = Color.RED if i < 6 else Color.BLUE
+        #     face = np.array(face)
+        #     face_polygon = ConvexPolygon3D(face, color=Color.RED)
+        #     self.scene.addShape(face_polygon, self.name+"_face"+str(i))
+        #     self.scene.addShape(Point3D(face_polygon.center, size=1, color=Color.BLACK), self.name+"_face_center"+str(i))
                 
         
 

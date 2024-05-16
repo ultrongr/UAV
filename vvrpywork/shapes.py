@@ -2883,7 +2883,7 @@ class Triangle3D(Mesh3D):
 class ConvexPolygon3D(Mesh3D):
     '''A class used to represent a convex polygon in 3D space. All points must be in the same plane.'''
 
-    def __init__(self, points:NDArray, color:ColorType=(0, 0, 0)):
+    def __init__(self, points:NDArray, normal:list|NDArray|None = None, color:ColorType=(0, 0, 0)):
         '''Inits ConvexPolygon3D.
 
         Inits a ConvexPolygon3D from a set of points.
@@ -2899,16 +2899,68 @@ class ConvexPolygon3D(Mesh3D):
         self._material.base_color = (*color[:3], color[3] if len(color) == 4 else 1)
 
 
+        # Add vertices
+        if normal is None:
+            normal = np.cross(points[1] - points[0], points[2] - points[0])
+        self.normal=np.array(normal)
         center = np.mean(points, axis=0)
         self.center = center
-        sorted_points = sorted(points, key=lambda p: np.arctan2(p[1]-center[1], p[0]-center[0]))
-        sorted_points.insert(0, center)
+        sorted_points = self.order_points(points)
         self._shape.vertices = o3d.utility.Vector3dVector(sorted_points)
 
-        # self._shape.vertices = o3d.utility.Vector3dVector(points)
-        self._shape.triangles = o3d.utility.Vector3iVector([[0, i, i+1] for i in range(1, len(points))])
-
+        # Add triangles
+        triangles=[]
+        triangles.append([0, 1, len(sorted_points)-1])
+        for i in range(1, len(sorted_points)-1):
+            triangles.append([0, i, i+1])
         
+        self._shape.triangles = o3d.utility.Vector3iVector(triangles)
+
+    
+    def order_points(self, points:NDArray) -> NDArray:
+        '''Orders the points of the convex polygon.
+
+        Orders the points of the convex polygon in a clockwise manner.
+
+        Args:
+            points: The points to order.
+        
+        Returns:
+            The points in clockwise order.
+        '''
+
+        def get_angle(point1, point2, point3):
+                # Form vectors from the given points
+                vector1 = point1 - point2
+                vector2 = point3 - point2
+                
+                # Calculate the cross product
+                cross_product = np.cross(vector1, vector2)
+                
+                # Calculate the dot product
+                dot_product = np.dot(vector1, vector2)
+                
+                # Calculate the angle in radians
+                angle_rad = np.arctan2(np.dot(cross_product, self.normal), dot_product)
+                
+                # Convert angle to degrees
+                angle_deg = np.degrees(angle_rad) % 360  # Ensure the angle is within [0, 360) range
+                
+                return angle_deg
+        center= np.mean(points, axis=0)
+        points = list(points)
+        first_point = points[0]
+        points.remove(first_point)
+
+        sorted_points = sorted(points, key=lambda x: get_angle(first_point, center, x))
+        # for p in sorted_points:
+        #     print(get_angle(first_point, center, p))
+
+        # sorted_points = sorted(dop_face_points, key=lambda x: np.arctan2(x[2]-center[2], x[0]-center[0]))
+        sorted_points.insert(0, first_point)
+        print(len(sorted_points))
+        sorted_points.insert(0, center)
+        return np.array(sorted_points)
         
 
     @property
