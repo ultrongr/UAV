@@ -393,8 +393,13 @@ class UAV:
 
 
     def remove_kdop(self):
-        # print("removing")
+        kdop = self.boxes["kdop"]
+        kdop_name = self.name+"_kdop"
         self.scene.removeShape(self.name+"_kdop")
+        
+        for i, face in enumerate(kdop._polygons):
+            self.scene.removeShape(kdop_name+f"_face_{i}")
+        
         self.boxes["kdop"] = None
 
 class LandingPad:
@@ -426,7 +431,7 @@ class Airspace(Scene3D):
 
     def __init__(self, width, height, N, window_name="UAV"):
         super().__init__(width, height, window_name)
-        self.uavs = {}
+        self.uavs: list[UAV] = {}
         self.N = N
         # self.landing_pad = LandingPad(N, self)
         self.create_uavs()
@@ -472,8 +477,10 @@ class Airspace(Scene3D):
         if symbol == Key.K:
             for uav in self.uavs.values():
                 if uav.boxes["kdop"]:
+                    print("removing kdop")
                     uav.remove_kdop()
                 else:
+                    print("creating kdop")
                     uav.create_kdop(14)
 
     
@@ -500,7 +507,7 @@ def main():
 
 
     
-    airspace = Airspace(1920, 1080, N = 5)
+    airspace = Airspace(1920, 1080, N = 1)
 
     # for i,model in enumerate(models):
     #     uav = UAV(airspace, f"models/{model}.obj", position=[2*i, 1, 0], scale=None)

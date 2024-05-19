@@ -3013,3 +3013,18 @@ class Polyhedron3D(Mesh3D):
     def triangles(self, triangles:NDArray|List|Tuple):
         self._shape.triangles = o3d.utility.Vector3iVector(triangles)
 
+    def _addToScene(self, scene: Scene3D, name: None | str):
+        for i, polygon in enumerate(self._polygons):
+            polygon._addToScene(scene, name + f"_face_{i}")
+            # print("Added polygon", name+f"_face_{i}")
+        scene._shapeDict[name] = self
+        print(name)
+    
+
+
+    def _update(self, name: str, scene: Scene3D):
+        for i, polygon in enumerate(self._polygons):
+            polygon._update(scene, name + f"_{i}")
+        scene._shapeDict[name] = self
+
+
