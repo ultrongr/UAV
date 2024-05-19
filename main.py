@@ -500,7 +500,7 @@ def main():
 
 
     
-    airspace = Airspace(1920, 1080, N = 1)
+    airspace = Airspace(1920, 1080, N = 5)
 
     # for i,model in enumerate(models):
     #     uav = UAV(airspace, f"models/{model}.obj", position=[2*i, 1, 0], scale=None)
