@@ -22,10 +22,11 @@ unlitLine.shader = "unlitLine"
 unlitLine.line_width = 5
 
 models = ["v22_osprey",
+        "twin_copter",
         "F52",
         "Helicopter",
         "quadcopter_scifi",
-        "twin_copter",
+        
         # "fight_drone", ## small kdop issue
         # "B2_Spirit", ## small kdop issue
         
@@ -66,6 +67,8 @@ class UAV:
         
         self.scale(scale, fit_to_unit_sphere= (not scale))
 
+    def __eq__(self, other):
+        return self.name == other.name
 
     def update_boxes(self):
         create_methods_dict = {
@@ -209,7 +212,7 @@ class UAV:
         for face in faces:
             polygon = ConvexPolygon3D(np.array(face), color=Color.RED)
             polygons.append(polygon)
-        kdop = Polyhedron3D(polygons, color=Color.RED)
+        kdop = Polyhedron3D(polygons, color=Color.RED, name = self.name+"_kdop")
         self.scene.addShape(kdop, self.name+"_kdop")
         self.boxes["kdop"] = kdop
 
@@ -378,7 +381,7 @@ class UAV:
             face_polygon = ConvexPolygon3D(dop_face_points, normal=direction,color=Color.RED) # The dace of the kdop corresponding to the direction
             dop_polygons.append(face_polygon)
         
-        kdop = Polyhedron3D(dop_polygons, color=Color.RED) # The kdop
+        kdop = Polyhedron3D(dop_polygons, color=Color.RED, name = self.name + "_kdop") # The kdop
         self.scene.addShape(kdop, self.name+"_kdop")
         self.boxes["kdop"] = kdop
 
@@ -434,7 +437,9 @@ class Airspace(Scene3D):
         self.uavs: list[UAV] = {}
         self.N = N
         # self.landing_pad = LandingPad(N, self)
-        self.create_uavs()
+        # self.create_uavs()
+        self.create_colliding_uavs()
+        self.find_kdop_collisions()
 
     def create_uavs(self):
         for i in range(self.N):
@@ -445,6 +450,33 @@ class Airspace(Scene3D):
                 # uav.create_sphere(radius=None, resolution=30)
                 # uav.create_convex_hull()
     
+    def create_colliding_uavs(self):
+        model1= models[0]
+        model2= models[1]
+        filename1 = f"models/{model1}.obj"
+        filename2 = f"models/{model2}.obj"
+        uav1 = UAV(self, filename1, position=[1.5, 1, 0], scale=None)
+        uav2 = UAV(self, filename2, position=[0, 1, 0], scale=None)
+
+    
+    def find_kdop_collisions(self):
+        for uav1 in self.uavs.values():
+            for uav2 in self.uavs.values():
+                if uav1 == uav2:
+                    continue
+                if uav1.name != "v22_osprey_0":
+                    continue
+                if not uav1.boxes["kdop"]:
+                    uav1.create_kdop(6)
+                if not uav2.boxes["kdop"]:
+                    uav2.create_kdop(6)
+                import time
+                time1 = time.time()
+                if uav1.boxes["kdop"].collides_points(uav2.boxes["kdop"], show=True, scene=self):
+                    print(f"{uav1.name} collides with {uav2.name}")
+                else:
+                    print(f"{uav1.name} does not collide with {uav2.name}")
+                print(f"Collision check: {time.time()-time1:.2f}s")
 
 
 

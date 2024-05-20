@@ -2804,11 +2804,13 @@ class Triangle3D(Mesh3D):
         dot12 = v1[0] * v2[0] + v1[1] * v2[1]
 
         # Compute barycentric coordinates
+        if (dot00 * dot11 - dot01 * dot01) == 0:
+            return False
         inv_denom = 1 / (dot00 * dot11 - dot01 * dot01)
         u = (dot11 * dot02 - dot01 * dot12) * inv_denom
         v = (dot00 * dot12 - dot01 * dot02) * inv_denom
 
-        # Check if point is inside triangle
+        # Check if point is inside the triangle
         e=0.001
         return (u >= -e) and (v >= -e) and (u + v <= 1+e)
 
@@ -2855,12 +2857,6 @@ class Triangle3D(Mesh3D):
             if self.containsPoint(intersection):
                 return intersection
             
-        
-
-
-
-
-
 
         
 
@@ -2917,6 +2913,46 @@ class ConvexPolygon3D(Mesh3D):
             triangles.append([0, i, i+1])
         
         self._shape.triangles = o3d.utility.Vector3iVector(triangles)
+    
+    def collides(self, other:ConvexPolygon3D):
+        '''Checks if this convex polygon collides with another.
+
+        Args:
+            other: The other convex polygon to check for collision.
+        
+        Returns:
+            Whether the two convex polygons collide.
+        '''
+
+        def triangles_intersect(t1:NDArray, t2:NDArray):
+
+            triangle = Triangle3D(t1[0], t1[1], t1[2])
+            lines = [Line3D(t2[0], t2[1]), Line3D(t2[1], t2[2]), Line3D(t2[2], t2[0])]
+            for line in lines:
+                intersection=triangle.getLineIntersection(line)
+                if intersection is not None:
+                    return True
+            
+        
+        triangles = self.vertices[self._shape.triangles]
+        other_triangles = other.vertices[other._shape.triangles]
+
+        for triangle in triangles:
+            for other_triangle in other_triangles:
+                if triangles_intersect(triangle, other_triangle):
+                    return True
+    
+
+    def points_on_same_side(self, p1:NDArray, p2:NDArray): #-> bool:
+        self.normal = np.cross(self.points[1] - self.points[0], self.points[2] - self.points[0])
+
+        plane_eq = np.concatenate((self.normal, [np.dot(self.normal, self.center)]))
+
+        d1 = np.dot(plane_eq[:3], p1) + plane_eq[3]
+        d2 = np.dot(plane_eq[:3], p2) + plane_eq[3]
+        if d1 * d2 < 0:
+            return False
+        return True
 
     
     def order_points(self, points:NDArray) -> NDArray:
@@ -2958,7 +2994,8 @@ class ConvexPolygon3D(Mesh3D):
         sorted_points.insert(0, first_point)
         sorted_points.insert(0, center)
         return np.array(sorted_points)
-        
+    
+      
 
     @property
     def points(self) -> NDArray:
@@ -2968,10 +3005,12 @@ class ConvexPolygon3D(Mesh3D):
     @points.setter
     def points(self, points:NDArray|List|Tuple):
         self._shape.vertices = o3d.utility.Vector3dVector(points)
+        self.center = np.mean(points, axis=0)
+        self.normal = np.cross(points[1] - points[0], points[2] - points[0])
 
 
 class Polyhedron3D(Mesh3D):
-    def __init__(self, faces:list[ConvexPolygon3D]|NDArray, color:ColorType=(0, 0, 0)):
+    def __init__(self, faces:list[ConvexPolygon3D]|NDArray, name: str, color:ColorType=(0, 0, 0)):
         self._color = [*color, 1] if len(color) == 3 else [*color]
         self._polygons = []
         self._shape = o3d.geometry.TriangleMesh()
@@ -2981,6 +3020,8 @@ class Polyhedron3D(Mesh3D):
 
         _vertices=[]
         _triangles=[]
+
+        self.name = name
 
         for face in faces:
             self._polygons.append(face)
@@ -2994,6 +3035,55 @@ class Polyhedron3D(Mesh3D):
 
         self._shape.vertices = o3d.utility.Vector3dVector(_vertices)
         self._shape.triangles = o3d.utility.Vector3iVector(_triangles)
+    
+    def collides(self, other:Polyhedron3D):
+        for polygon in self._polygons:
+            for other_polygon in other._polygons:
+                if polygon.collides(other_polygon):
+                    return True
+        return False
+
+
+
+    def collides_points(self, other:Polyhedron3D, show=True, scene=None):
+        import random
+        center = np.mean(self.vertices, axis=0)
+        other_points = other.vertices
+        print(len(other_points))
+        print("other polyhedron:", other.name)
+        for i in range(10):
+            for j in range(10):
+                for k in range(10):
+                    div=5
+                    if self.contains_point(np.array([i/div, j/div, k/div]), center):
+                        scene.addShape(Point3D([i/div, j/div, k/div], color=(1, 0, 0), size=1), name="point"+f"{i}|{j}|{k}")
+                    else:
+                        scene.addShape(Point3D([i/div, j/div, k/div], color=(0, 1, 0), size=1), name="point"+f"{i}|{j}|{k}")
+        return
+        for other_polygon in other._polygons:
+            for i, point in enumerate(other_polygon.vertices):
+                # if i==0: # Center of the polygon
+                #     continue
+                
+                    
+                if not self.contains_point(point, center):
+                    continue
+
+                if show and scene:
+                    print("index", i, "point", point)
+                    print("Collision detected")
+                    scene.addShape(Point3D(point, color=(0, 0, 1), size=5))
+
+                return True
+        return False
+    
+    def contains_point(self, point:NDArray, center:NDArray):
+        polygon_index = -1
+        for i, polygon in enumerate(self._polygons):
+            if not polygon.points_on_same_side(center, point):
+                return False
+        
+        return True
     
     @property
     def vertices(self) -> NDArray:
