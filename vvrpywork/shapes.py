@@ -3045,12 +3045,23 @@ class Polyhedron3D(Mesh3D):
 
 
 
-    def collides_points(self, other:Polyhedron3D, show=False, scene=None):
+    def collides_points(self, other:Polyhedron3D, show=False, scene:Scene3D=None):
         import random
         center = np.mean(self.vertices, axis=0)
         other_points = other.vertices
         print(len(other_points))
         print("other polyhedron:", other.name)
+
+        # Remove previous collision point, arrows
+        if show and scene:
+            names=f"{self.name} + {other.name}: "
+            print("removing previous collision points")
+            dirs = [[1,0,0], [0,1,0], [0,0,1], [-1, 0, 0], [0, -1, 0], [0, 0, -1]]
+            scene.removeShape(names+"collision_point")
+            for _dir in dirs:
+                scene.removeShape(names+f"collision_arrow_{_dir[0]}_{_dir[1]}_{_dir[2]}")
+        
+        
         
         for other_polygon in other._polygons:
             for i, point in enumerate(other_polygon.vertices):
@@ -3059,7 +3070,15 @@ class Polyhedron3D(Mesh3D):
                     continue
 
                 if show and scene:
-                    scene.addShape(Point3D(point, color=(0, 0, 1), size=5))
+                    scene.addShape(Point3D(point, color=(0, 0, 1), size=5), name=names+f"collision_point")
+
+
+                    
+
+                    for _dir in dirs:
+                        arrow = Arrow3D(point, point+_dir, color=(0, 0, 1))
+                        scene.addShape(arrow, name = names+f"collision_arrow_{_dir[0]}_{_dir[1]}_{_dir[2]}")
+                    
 
                 return True
         return False
