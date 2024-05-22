@@ -3051,24 +3051,20 @@ class Polyhedron3D(Mesh3D):
         other_points = other.vertices
         print(len(other_points))
         print("other polyhedron:", other.name)
-        face1 = self._polygons[0]
-        scene.addShape(Point3D(face1.center, color=(1, 0, 0), size=3), name="face_center")
-        scene.addShape(Point3D(center, color=(0, 1, 0), size=5), name="center")
-        # return
 
-        for i in range(10):
-            for j in range(10):
-                for k in range(10):
-                    div=5
-                    # if face1.points_on_same_side(center, np.array([i/div, j/div, k/div])):
-                    #     scene.addShape(Point3D([i/div, j/div, k/div], color=(1, 0, 0), size=1), name="point"+f"{i}|{j}|{k}")
-                    # else:
-                    #     scene.addShape(Point3D([i/div, j/div, k/div], color=(0, 1, 0), size=1), name="point"+f"{i}|{j}|{k}")
-                    if self.contains_point(np.array([i/div, j/div, k/div]), center):
-                        scene.addShape(Point3D([i/div, j/div, k/div], color=(1, 0, 0), size=1), name="point"+f"{i}|{j}|{k}")
-                    else:
-                        scene.addShape(Point3D([i/div, j/div, k/div], color=(0, 1, 0), size=1), name="point"+f"{i}|{j}|{k}")
-        return
+        # for i in range(10):
+        #     for j in range(10):
+        #         for k in range(10):
+        #             div=5
+        #             # if face1.points_on_same_side(center, np.array([i/div, j/div, k/div])):
+        #             #     scene.addShape(Point3D([i/div, j/div, k/div], color=(1, 0, 0), size=1), name="point"+f"{i}|{j}|{k}")
+        #             # else:
+        #             #     scene.addShape(Point3D([i/div, j/div, k/div], color=(0, 1, 0), size=1), name="point"+f"{i}|{j}|{k}")
+        #             if self.contains_point(np.array([i/div, j/div, k/div]), center):
+        #                 scene.addShape(Point3D([i/div, j/div, k/div], color=(1, 0, 0), size=1), name="point"+f"{i}|{j}|{k}")
+        #             else:
+        #                 scene.addShape(Point3D([i/div, j/div, k/div], color=(0, 1, 0), size=1), name="point"+f"{i}|{j}|{k}")
+        # return
         for other_polygon in other._polygons:
             for i, point in enumerate(other_polygon.vertices):
                 # if i==0: # Center of the polygon
@@ -3079,8 +3075,8 @@ class Polyhedron3D(Mesh3D):
                     continue
 
                 if show and scene:
-                    print("index", i, "point", point)
-                    print("Collision detected")
+                    # print("index", i, "point", point)
+                    # print("Collision detected")
                     scene.addShape(Point3D(point, color=(0, 0, 1), size=5))
 
                 return True
@@ -3117,7 +3113,6 @@ class Polyhedron3D(Mesh3D):
             polygon._addToScene(scene, name + f"_face_{i}")
             # print("Added polygon", name+f"_face_{i}")
         scene._shapeDict[name] = self
-        print(name)
     
 
 

@@ -89,11 +89,13 @@ class UAV:
                 continue
                 
         
-    def move_to(self, position:np.ndarray):
+    def move_to(self, new_position:np.ndarray|list):
         "Move the UAV to the specified position"
-        dist = position - self.position
+        new_position = np.array(new_position)
+        self.position=np.array(self.position)
+        dist = new_position - self.position
         self.mesh.vertices += dist
-        self.position = position
+        self.position = new_position
         self.mesh._update(self.name, self.scene)
 
     
@@ -514,7 +516,20 @@ class Airspace(Scene3D):
                 else:
                     print("creating kdop")
                     uav.create_kdop(14)
-
+        
+        osprey = self.uavs["v22_osprey_0"]
+        if symbol in [Key.UP, Key.DOWN, Key.LEFT, Key.RIGHT]:
+            osprey.remove_kdop()
+            if symbol == Key.UP:
+                osprey.move_by([0, 0, 0.1])
+            if symbol == Key.DOWN:
+                osprey.move_by([0, 0, -0.1])
+            if symbol == Key.LEFT:
+                osprey.move_by([-0.1, 0, 0])
+            if symbol == Key.RIGHT:
+                osprey.move_by([0.1, 0, 0])
+            osprey.create_kdop(6)
+            self.find_kdop_collisions()
     
     def addUAV(self, uav:UAV):
         self.uavs[uav.name] = uav
