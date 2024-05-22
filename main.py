@@ -530,7 +530,8 @@ class Airspace(Scene3D):
                 else:
                     print("creating kdop")
                     uav.create_kdop(kdop_number)
-        
+        if symbol == Key.L:
+            self.find_kdop_collisions()
         osprey = self.uavs["v22_osprey_0"]
         if symbol in [Key.UP, Key.DOWN, Key.LEFT, Key.RIGHT, Key.SPACE, Key.BACKSPACE]:
             # osprey.remove_kdop()
@@ -547,7 +548,7 @@ class Airspace(Scene3D):
             if symbol == Key.BACKSPACE:
                 osprey.move_by([0, -0.1, 0])
             # osprey.create_kdop(kdop_number)
-            self.find_kdop_collisions()
+            # self.find_kdop_collisions()
     
     def addUAV(self, uav:UAV):
         self.uavs[uav.name] = uav

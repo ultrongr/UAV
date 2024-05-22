@@ -3052,7 +3052,6 @@ class Polyhedron3D(Mesh3D):
         print(len(other_points))
         print("other polyhedron:", other.name)
         
-        return
         for other_polygon in other._polygons:
             for i, point in enumerate(other_polygon.vertices):
                     
@@ -3111,8 +3110,11 @@ class Polyhedron3D(Mesh3D):
     def move_by(self, distance:NDArray):
         # self._shape.translate(distance)
         self.vertices = self.vertices + distance
+        
         for polygon in self._polygons:
-            polygon.vertices = polygon.vertices + distance
+            # polygon.vertices = polygon.vertices + distance
+            # polygon.center = polygon.center + distance
+            polygon.points = polygon.points + distance
     
     
 
