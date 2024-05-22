@@ -2946,7 +2946,7 @@ class ConvexPolygon3D(Mesh3D):
     def points_on_same_side(self, p1:NDArray, p2:NDArray): #-> bool:
         self.normal = np.cross(self.points[1] - self.points[0], self.points[2] - self.points[0])
 
-        plane_eq = np.concatenate((self.normal, [np.dot(self.normal, self.center)]))
+        plane_eq = np.concatenate((self.normal, [-np.dot(self.normal, self.center)]))
 
         d1 = np.dot(plane_eq[:3], p1) + plane_eq[3]
         d2 = np.dot(plane_eq[:3], p2) + plane_eq[3]
@@ -3045,16 +3045,25 @@ class Polyhedron3D(Mesh3D):
 
 
 
-    def collides_points(self, other:Polyhedron3D, show=True, scene=None):
+    def collides_points(self, other:Polyhedron3D, show=False, scene=None):
         import random
         center = np.mean(self.vertices, axis=0)
         other_points = other.vertices
         print(len(other_points))
         print("other polyhedron:", other.name)
+        face1 = self._polygons[0]
+        scene.addShape(Point3D(face1.center, color=(1, 0, 0), size=3), name="face_center")
+        scene.addShape(Point3D(center, color=(0, 1, 0), size=5), name="center")
+        # return
+
         for i in range(10):
             for j in range(10):
                 for k in range(10):
                     div=5
+                    # if face1.points_on_same_side(center, np.array([i/div, j/div, k/div])):
+                    #     scene.addShape(Point3D([i/div, j/div, k/div], color=(1, 0, 0), size=1), name="point"+f"{i}|{j}|{k}")
+                    # else:
+                    #     scene.addShape(Point3D([i/div, j/div, k/div], color=(0, 1, 0), size=1), name="point"+f"{i}|{j}|{k}")
                     if self.contains_point(np.array([i/div, j/div, k/div]), center):
                         scene.addShape(Point3D([i/div, j/div, k/div], color=(1, 0, 0), size=1), name="point"+f"{i}|{j}|{k}")
                     else:
