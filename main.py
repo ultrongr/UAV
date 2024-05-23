@@ -11,7 +11,8 @@ from vvrpywork.shapes import (
     Point2D, Line2D, Triangle2D, Circle2D, Rectangle2D,
     PointSet2D, LineSet2D, Polygon2D,
     Point3D, Line3D, Arrow3D, Sphere3D, Cuboid3D, Cuboid3DGeneralized,
-    PointSet3D, LineSet3D, Mesh3D, Triangle3D, ConvexPolygon3D, Polyhedron3D
+    PointSet3D, LineSet3D, Mesh3D, Triangle3D, ConvexPolygon3D, Polyhedron3D,
+    AabbNode,
 )
 
 defaultUnlit = rendering.MaterialRecord()
@@ -32,7 +33,7 @@ models = ["v22_osprey",
         
     ]
 
-kdop_number = 6
+kdop_number = 14
 
 
 
@@ -482,13 +483,39 @@ class Airspace(Scene3D):
                     continue
                 if uav1.name != "v22_osprey_0":
                     continue
+                created1 = False
+                created2 = False
                 if not uav1.boxes["kdop"]:
+                    created1 = True
                     uav1.create_kdop(kdop_number)
                 if not uav2.boxes["kdop"]:
+                    created2 = True
                     uav2.create_kdop(kdop_number)
                 import time
                 time1 = time.time()
                 if uav1.boxes["kdop"].collides_lines(uav2.boxes["kdop"], show=True, scene=self):
+                    print(f"{uav1.name} collides with {uav2.name}")
+                else:
+                    print(f"{uav1.name} does not collide with {uav2.name}")
+                print(f"Collision check: {time.time()-time1:.2f}s")
+                if created1:
+                    uav1.remove_kdop()
+                if created2:
+                    uav2.remove_kdop()
+
+    def find_aabb_collisions(self):
+        for uav1 in self.uavs.values():
+            for uav2 in self.uavs.values():
+                if uav1 == uav2:
+                    continue
+                if uav1.name != "v22_osprey_0":
+                    continue
+
+                import time
+                time1 = time.time()
+                uav1_aabb_node = AabbNode(uav1.mesh.vertices)
+                uav2_aabb_node = AabbNode(uav2.mesh.vertices)
+                if uav1_aabb_node.collides(uav2_aabb_node):
                     print(f"{uav1.name} collides with {uav2.name}")
                 else:
                     print(f"{uav1.name} does not collide with {uav2.name}")
@@ -525,14 +552,15 @@ class Airspace(Scene3D):
         if symbol == Key.K:
             for uav in self.uavs.values():
                 if uav.boxes["kdop"]:
-                    print("removing kdop")
+                    # print("removing kdop")
                     uav.remove_kdop()
                 else:
-                    print("creating kdop")
+                    # print("creating kdop")
                     uav.create_kdop(kdop_number)
 
         if symbol == Key.L:
-            self.find_kdop_collisions()
+            # self.find_kdop_collisions()
+            self.find_aabb_collisions()
 
         osprey = self.uavs["v22_osprey_0"]
         if symbol in [Key.UP, Key.DOWN, Key.LEFT, Key.RIGHT, Key.SPACE, Key.BACKSPACE]:

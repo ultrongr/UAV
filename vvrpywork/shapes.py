@@ -3038,7 +3038,7 @@ class ConvexPolygon3D(Mesh3D):
                 return False
         return True
 
-    def intersects_line(self, line:Line3D):
+    def intersects_line(self, line:Line3D) -> NDArray|None:
         '''Checks if the convex polygon intersects with a line.
 
         Args:
@@ -3064,7 +3064,7 @@ class ConvexPolygon3D(Mesh3D):
         
         if np.isclose(denominator, 0):
             # raise ValueError("The line is parallel to the plane")
-            return False
+            return None
         
         t = numerator / denominator
         intersection_point = line_point + t * line_dir
@@ -3128,7 +3128,18 @@ class Polyhedron3D(Mesh3D):
 
 
     def collides_points(self, other:Polyhedron3D, show=False, scene:Scene3D=None):
-        import random
+        '''Checks if this polyhedron collides with another.
+        It uses the points of the other polyhedron to check if they are inside this polyhedron (not a perfect method).
+
+        Args:
+            other: The other polyhedron to check for collision.
+            show: Whether to show the collision shapes.
+            scene: The scene to show the collision shapes.
+
+        Returns:
+            Whether the two polyhedrons collide.
+        '''
+
         center = np.mean(self.vertices, axis=0)
         other_points = other.vertices
         print(len(other_points))
@@ -3166,7 +3177,28 @@ class Polyhedron3D(Mesh3D):
         return False
     
     def collides_lines(self, other:Polyhedron3D, show=False, scene=None):
+        '''Checks if this polyhedron collides with another. 
+        It uses the lines of each of the other polygons to check for collision with its own polygons.
+
+        Args:
+            other: The other polyhedron to check for collision.
+            show: Whether to show the collision shapes.
+            scene: The scene to show the collision shapes.
+
+        Returns:
+            Whether the two polyhedrons collide.
+
+        '''
+
+
         center = np.mean(self.vertices, axis=0)
+
+        # Remove previous collision shapes
+        if show and scene:
+            shapes = ["collision_intersection", "collision_line", "collision_polygon", "collision_other_polygon"]
+            for shape in shapes:
+                scene.removeShape(shape)
+
 
         for polygon in self._polygons:
             for other_polygon in other._polygons:
@@ -3177,8 +3209,18 @@ class Polyhedron3D(Mesh3D):
                         continue
                     if show and scene:
                         print("Collision detected")
-                        copy_line = Line3D(line.getPointFrom(), line.getPointTo(), width = 5, color=(1, 0, 0))
+                        print("intersection", intersection)
+                        copy_intersection = Point3D(intersection, color=(0, 0, 1), size=3)
+                        scene.addShape(copy_intersection, name="collision_intersection")
+
+                        copy_line = Line3D(line.getPointFrom(), line.getPointTo(), width = 2, color=(0, 0, 1))
                         scene.addShape(copy_line, name="collision_line")
+
+                        copy_polygon = ConvexPolygon3D(polygon.points[1:], color=(0, 0, 1))
+                        scene.addShape(copy_polygon, name="collision_polygon")
+
+                        other_copy_polygon = ConvexPolygon3D(other_polygon.points[1:], color=(0, 0, 1))
+                        scene.addShape(other_copy_polygon, name="collision_other_polygon")
                     return True
 
 
@@ -3219,10 +3261,6 @@ class Polyhedron3D(Mesh3D):
     
 
 
-    # def _update(self, name: str, scene: Scene3D):
-    #     for i, polygon in enumerate(self._polygons):
-    #         polygon._update(name, scene)
-    #     scene._shapeDict[name] = self
     
     def move_by(self, distance:NDArray):
         # self._shape.translate(distance)
@@ -3233,6 +3271,77 @@ class Polyhedron3D(Mesh3D):
             # polygon.center = polygon.center + distance
             polygon.points = polygon.points + distance
     
+class AabbNode:
+    def __init__(self, points:NDArray, max_depth:int=8, depth:int=0):
+        self.points = points
+        self.depth = depth
+        self.center = np.mean(points, axis=0)
+        self.minx = np.min(points[:, 0])
+        self.miny = np.min(points[:, 1])
+        self.minz = np.min(points[:, 2])
+        self.maxx = np.max(points[:, 0])
+        self.maxy = np.max(points[:, 1])
+        self.maxz = np.max(points[:, 2])
+
+        self.children = []
+        if depth < max_depth and len(points) > 1:
+            self.create_children()
+    
+    def create_children(self):
+
+        conditions = [
+        (self.points[:, 0] < self.center[0]) & (self.points[:, 1] < self.center[1]) & (self.points[:, 2] < self.center[2]),
+        (self.points[:, 0] >= self.center[0]) & (self.points[:, 1] < self.center[1]) & (self.points[:, 2] < self.center[2]),
+        (self.points[:, 0] < self.center[0]) & (self.points[:, 1] >= self.center[1]) & (self.points[:, 2] < self.center[2]),
+        (self.points[:, 0] >= self.center[0]) & (self.points[:, 1] >= self.center[1]) & (self.points[:, 2] < self.center[2]),
+        (self.points[:, 0] < self.center[0]) & (self.points[:, 1] < self.center[1]) & (self.points[:, 2] >= self.center[2]),
+        (self.points[:, 0] >= self.center[0]) & (self.points[:, 1] < self.center[1]) & (self.points[:, 2] >= self.center[2]),
+        (self.points[:, 0] < self.center[0]) & (self.points[:, 1] >= self.center[1]) & (self.points[:, 2] >= self.center[2]),
+        (self.points[:, 0] >= self.center[0]) & (self.points[:, 1] >= self.center[1]) & (self.points[:, 2] >= self.center[2])
+        ]
+
+        children_points = [self.points[condition] for condition in conditions]
+
+        
+
+        for points in children_points:
+            if len(points) == 0:
+                self.children.append(None)
+            else:
+                self.children.append(AabbNode(np.array(points), depth=self.depth+1))
+
+
+        
+
+
+    def collides(self, other:AabbNode):
+        if self.minx > other.maxx or self.maxx < other.minx:
+            return False
+        if self.miny > other.maxy or self.maxy < other.miny:
+            return False
+        if self.minz > other.maxz or self.maxz < other.minz:
+            return False
+        
+        if len(self.children) == 0 and len(other.children) == 0:
+            return True
+        
+        for i in range(8):
+            for j in range(8):
+                if self.children[i] is not None and other.children[j] is not None:
+                    if self.children[i].collides(other.children[j]):
+                        return True
+
+        
+        return False
     
 
 
+class AabbTree:
+    def __init__(self, points:NDArray, max_depth:int=10):
+        self._points = points
+        self._max_depth = max_depth
+    
+
+    def find_collisions(self, other:AabbTree):
+        pass
+        
