@@ -3173,12 +3173,13 @@ class Polyhedron3D(Mesh3D):
                 other_lines = [Line3D(other_polygon.points[i], other_polygon.points[i+1]) for i in range(1, len(other_polygon.points)-1)]
                 for line in other_lines:
                     intersection = polygon.intersects_line(line)
-                    if intersection is not None:
-                        if show and scene:
-                            print("Collision detected")
-                            copy_line = Line3D(line.getPointFrom(), line.getPointTo(), width = 5, color=(1, 0, 0))
-                            scene.addShape(copy_line, name="collision_line")
-                        return True
+                    if intersection is None:
+                        continue
+                    if show and scene:
+                        print("Collision detected")
+                        copy_line = Line3D(line.getPointFrom(), line.getPointTo(), width = 5, color=(1, 0, 0))
+                        scene.addShape(copy_line, name="collision_line")
+                    return True
 
 
         return
