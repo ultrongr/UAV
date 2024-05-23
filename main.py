@@ -32,7 +32,7 @@ models = ["v22_osprey",
         
     ]
 
-kdop_number = 14
+kdop_number = 6
 
 
 
@@ -488,7 +488,7 @@ class Airspace(Scene3D):
                     uav2.create_kdop(kdop_number)
                 import time
                 time1 = time.time()
-                if uav1.boxes["kdop"].collides_points(uav2.boxes["kdop"], show=True, scene=self):
+                if uav1.boxes["kdop"].collides_lines(uav2.boxes["kdop"], show=True, scene=self):
                     print(f"{uav1.name} collides with {uav2.name}")
                 else:
                     print(f"{uav1.name} does not collide with {uav2.name}")

@@ -2995,6 +2995,88 @@ class ConvexPolygon3D(Mesh3D):
         sorted_points.insert(0, center)
         return np.array(sorted_points)
     
+    def get_normal(self):
+        '''Returns the normal of the convex polygon.
+
+        Returns:
+            The normal of the convex polygon.
+        '''
+        self.normal=np.cross(self.points[1] - self.points[0], self.points[2] - self.points[0])
+        return self.normal
+
+    def get_plane_equation(self):
+        '''Returns the plane equation of the convex polygon.
+
+        Returns:
+            The plane equation of the convex polygon.
+        '''
+        return np.concatenate((self.get_normal(), [-np.dot(self.normal, self.center)]))
+
+    def contains_point(self, point:NDArray, center:NDArray):
+        '''Checks if the convex polygon contains a point.
+
+        Args:
+            point: The point to check for containment.
+        
+        Returns:
+            Whether the convex polygon contains the point.
+        '''
+        plane_eq = self.get_plane_equation()
+        d = np.dot(plane_eq[:3], point) + plane_eq[3]
+        if not np.allclose(d, 0):
+            return False
+        point_to_center_line = Line3D(point, center)
+        
+        for i, p in enumerate(self.points):
+            if i==0: #Skipping center point
+                continue
+            if i==len(self.points)-1:
+                continue
+
+            line = Line3D(p, self.points[i+1])
+            if point_to_center_line.intersects_line(line):
+                return False
+        return True
+
+    def intersects_line(self, line:Line3D):
+        '''Checks if the convex polygon intersects with a line.
+
+        Args:
+
+            line: The line to check for intersection.
+
+        Returns:
+            Whether the convex polygon intersects with the line.
+        '''
+
+
+        # Get the plane equation
+        plane_eq = self.get_plane_equation()
+
+        # Find the plane-line intersection point
+        line_point = np.array([line.getPointFrom().x, line.getPointFrom().y, line.getPointFrom().z])
+        line_end_point = np.array([line.getPointTo().x, line.getPointTo().y, line.getPointTo().z])
+
+        line_dir = line_end_point - line_point
+
+        numerator = np.dot(self.normal, self.points[0] - line_point)
+        denominator = np.dot(self.normal, line_dir)
+        
+        if np.isclose(denominator, 0):
+            # raise ValueError("The line is parallel to the plane")
+            return False
+        
+        t = numerator / denominator
+        intersection_point = line_point + t * line_dir
+
+        return intersection_point if t >= 0 and t <= 1 else None
+
+
+
+
+
+
+        return
       
 
     @property
@@ -3084,6 +3166,21 @@ class Polyhedron3D(Mesh3D):
         return False
     
     def collides_lines(self, other:Polyhedron3D, show=False, scene=None):
+        center = np.mean(self.vertices, axis=0)
+
+        for polygon in self._polygons:
+            for other_polygon in other._polygons:
+                other_lines = [Line3D(other_polygon.points[i], other_polygon.points[i+1]) for i in range(1, len(other_polygon.points)-1)]
+                for line in other_lines:
+                    intersection = polygon.intersects_line(line)
+                    if intersection is not None:
+                        if show and scene:
+                            print("Collision detected")
+                            copy_line = Line3D(line.getPointFrom(), line.getPointTo(), width = 5, color=(1, 0, 0))
+                            scene.addShape(copy_line, name="collision_line")
+                        return True
+
+
         return
 
 
