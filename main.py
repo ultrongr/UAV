@@ -477,11 +477,12 @@ class Airspace(Scene3D):
 
     
     def find_kdop_collisions(self):
+        collisions = {}
         for uav1 in self.uavs.values():
             for uav2 in self.uavs.values():
                 if uav1 == uav2:
                     continue
-                if uav1.name != "v22_osprey_0":
+                if (uav1.name, uav2.name) in collisions or (uav2.name, uav1.name) in collisions:
                     continue
                 created1 = False
                 created2 = False
@@ -495,6 +496,7 @@ class Airspace(Scene3D):
                 time1 = time.time()
                 if uav1.boxes["kdop"].collides_lines(uav2.boxes["kdop"], show=True, scene=self):
                     print(f"{uav1.name} collides with {uav2.name}")
+                    collisions[(uav1.name, uav2.name)] = True
                 else:
                     print(f"{uav1.name} does not collide with {uav2.name}")
                 print(f"Collision check: {time.time()-time1:.2f}s")
@@ -504,22 +506,263 @@ class Airspace(Scene3D):
                     uav2.remove_kdop()
 
     def find_aabb_collisions(self):
+        collisions = {}
         for uav1 in self.uavs.values():
             for uav2 in self.uavs.values():
                 if uav1 == uav2:
                     continue
-                if uav1.name != "v22_osprey_0":
+                if (uav1.name, uav2.name) in collisions or (uav2.name, uav1.name) in collisions:
                     continue
 
                 import time
                 time1 = time.time()
-                uav1_aabb_node = AabbNode(uav1.mesh.vertices)
-                uav2_aabb_node = AabbNode(uav2.mesh.vertices)
-                if uav1_aabb_node.collides(uav2_aabb_node):
+                uav1_aabb_node = AabbNode(uav1.mesh.vertices, max_depth = 3)
+                uav2_aabb_node = AabbNode(uav2.mesh.vertices, max_depth = 3)
+                if uav1_aabb_node.collides(uav2_aabb_node, show=True, scene=self):
                     print(f"{uav1.name} collides with {uav2.name}")
+                    collisions[(uav1.name, uav2.name)] = True
                 else:
+                    self.removeShape("aabb_node_collision_1")
+                    self.removeShape("aabb_node_collision_2")
                     print(f"{uav1.name} does not collide with {uav2.name}")
                 print(f"Collision check: {time.time()-time1:.2f}s")
+
+    def find_mesh_collisions_slow(self):
+        import tqdm
+        collisions = {}
+        for uav1 in self.uavs.values():
+            for uav2 in self.uavs.values():
+                if uav1 == uav2:
+                    continue
+                if (uav1.name, uav2.name) in collisions or (uav2.name, uav1.name) in collisions:
+                    continue
+                import time
+                colision = False
+                dist = np.linalg.norm(uav1.position - uav2.position)
+                if dist>2:
+                    continue
+                time1 = time.time()
+                mesh1 = uav1.mesh
+                mesh2 = uav2.mesh
+                dist_cutoff = 0.1
+                for t1 in tqdm.tqdm(range(len(mesh1.triangles)), desc="outer loop"):
+                    for t2 in tqdm.tqdm(range(len(mesh2.triangles)), desc="inner loop"):
+                        
+                        triangle1 = mesh1.triangles[t1]
+                        triangle2 = mesh2.triangles[t2]
+                        v1 = mesh1.vertices[triangle1]
+                        v2 = mesh2.vertices[triangle2]
+                        dist = np.linalg.norm(np.mean(v1, axis=0) - np.mean(v2, axis=0))
+                        if dist > dist_cutoff:
+                            continue
+                        if Triangle3D(v1[0], v1[1], v1[2]).collides_triangle(Triangle3D(v2[0], v2[1], v2[2])):
+                            print(f"{uav1.name} collides with {uav2.name}")
+                            collisions[(uav1.name, uav2.name)] = True
+                            colision = True
+                            break
+                    else:
+                        continue
+                    break
+                if not colision:
+                    print(f"{uav1.name} does not collide with {uav2.name}")
+                else:
+                    print(f"{uav1.name} collides with {uav2.name}")
+                print(f"Collision check: {time.time()-time1:.2f}s")
+
+    def find_mesh_collisions_opt(self):
+        import tqdm
+        collisions = {}
+        checked_pairs = {}
+
+        number_of_batches=2000
+        print(f"Optimized collision check, number of pieces: {number_of_batches}")
+
+        for uav1 in self.uavs.values():
+            for uav2 in self.uavs.values():
+                if uav1 == uav2:
+                    continue
+                if (uav1.name, uav2.name) in checked_pairs or (uav2.name, uav1.name) in checked_pairs:
+                    continue
+                checked_pairs[(uav1.name, uav2.name)] = True
+                import time
+                colision = False
+                dist = np.linalg.norm(uav1.position - uav2.position)
+                if dist>2:
+                    continue
+                time1 = time.time()
+
+                mesh1 = uav1.mesh
+                mesh2 = uav2.mesh
+
+                batch_size = len(mesh1.triangles)//number_of_batches
+                batches1_min_cords=[]
+                batches1_max_cords=[]
+                batches2_min_cords=[]
+                batches2_max_cords=[]
+                for i in range(0, len(mesh1.triangles), batch_size):
+                    batch_triangles = mesh1.triangles[i:i+batch_size]
+                    indices_array = np.array(batch_triangles).flatten()
+                    batch_vertices = mesh1.vertices[indices_array]
+                    min_x = np.min(batch_vertices[:, 0])
+                    min_y = np.min(batch_vertices[:, 1])
+                    min_z = np.min(batch_vertices[:, 2])
+                    max_x = np.max(batch_vertices[:, 0])
+                    max_y = np.max(batch_vertices[:, 1])
+                    max_z = np.max(batch_vertices[:, 2])
+                    batches1_min_cords.append([min_x, min_y, min_z])
+                    batches1_max_cords.append([max_x, max_y, max_z])
+
+                for i in range(0, len(mesh2.triangles), batch_size):
+                    batch_triangles = mesh2.triangles[i:i+batch_size]
+                    indices_array = np.array(batch_triangles).flatten()
+                    batch_vertices = mesh2.vertices[indices_array]
+                    min_x = np.min(batch_vertices[:, 0])
+                    min_y = np.min(batch_vertices[:, 1])
+                    min_z = np.min(batch_vertices[:, 2])
+                    max_x = np.max(batch_vertices[:, 0])
+                    max_y = np.max(batch_vertices[:, 1])
+                    max_z = np.max(batch_vertices[:, 2])
+                    batches2_min_cords.append([min_x, min_y, min_z])
+                    batches2_max_cords.append([max_x, max_y, max_z])
+                
+                batches1_min_cords = np.array(batches1_min_cords)
+                batches1_max_cords = np.array(batches1_max_cords)
+                batches2_min_cords = np.array(batches2_min_cords)
+                batches2_max_cords = np.array(batches2_max_cords)
+
+
+                # for i in tqdm.tqdm(range(len(batches1_min_cords)), desc="outer loop"):
+                for i in range(len(batches1_min_cords)):
+                    
+                    # for j in tqdm.tqdm(range(len(batches2_min_cords)), desc="inner loop"):
+                    for j in range(len(batches2_min_cords)):
+                        min1 = batches1_min_cords[i]
+                        max1 = batches1_max_cords[i]
+                        min2 = batches2_min_cords[j]
+                        max2 = batches2_max_cords[j]
+                        if not (min1[0] < max2[0] and max1[0] > min2[0] and
+                                min1[1] < max2[1] and max1[1] > min2[1] and
+                                min1[2] < max2[2] and max1[2] > min2[2]):
+                            continue
+                        for t1 in range(i*batch_size, (i+1)*batch_size):
+                            for t2 in range(j*batch_size, (j+1)*batch_size):
+                                triangle1 = mesh1.triangles[t1]
+                                triangle2 = mesh2.triangles[t2]
+                                v1 = mesh1.vertices[triangle1]
+                                v2 = mesh2.vertices[triangle2]
+                                if Triangle3D(v1[0], v1[1], v1[2]).collides_triangle(Triangle3D(v2[0], v2[1], v2[2])):
+                                    print(f"{uav1.name} collides with {uav2.name}")
+                                    collisions[(uav1.name, uav2.name)] = True
+                                    colision = True
+                                    break
+                            else:
+                                continue
+                            break
+                        if colision:
+                            break
+                    if colision:
+                        break
+                if not colision:
+                    print(f"{uav1.name} does not collide with {uav2.name}")
+                else:
+                    print(f"{uav1.name} collides with {uav2.name}")
+                print(f"Collision check: {time.time()-time1:.2f}s")
+        print("End of optimized collision check")
+
+
+    def find_mesh_collisions_opt_new(self):
+        import tqdm
+        collisions = {}
+        checked_pairs = {}
+
+        number_of_partitions: int = 2000
+        print(f"New optimized collision check, number of pieces: {number_of_partitions}")
+
+        for uav1 in self.uavs.values():
+            for uav2 in self.uavs.values():
+                if uav1 == uav2:
+                    continue
+                if (uav1.name, uav2.name) in checked_pairs or (uav2.name, uav1.name) in checked_pairs:
+                    continue
+                checked_pairs[(uav1.name, uav2.name)] = True
+                import time
+                colision = False
+                dist = np.linalg.norm(uav1.position - uav2.position)
+                if dist>2:
+                    continue
+                time1 = time.time()
+
+                
+                partitions_space = np.linspace(0, 4, number_of_partitions+1)
+                partitions1 = [[] for _ in range(number_of_partitions)]
+                partitions2 = [[] for _ in range(number_of_partitions)]
+
+
+                mesh1 = uav1.mesh
+                mesh2 = uav2.mesh
+
+                minx1 = np.min(mesh1.vertices[:, 0])
+                minx2 = np.min(mesh2.vertices[:, 0])
+                maxx1 = np.max(mesh1.vertices[:, 0])
+                maxx2 = np.max(mesh2.vertices[:, 0])
+                print(minx1, minx2)
+                print(maxx1, maxx2)
+                total_minx = min(minx1, minx2)
+                step = 4/number_of_partitions
+
+                for triangle in mesh1.triangles:
+                    vertices = mesh1.vertices[triangle]
+                    minx = np.min(vertices[:, 0])
+                    maxx = np.max(vertices[:, 0])
+                    partition_start = int((minx - total_minx)//step)
+                    partition_end = int((maxx - total_minx)//step)
+                    for i in range(partition_start, partition_end):
+                        try:
+                            partitions1[i].append(triangle)
+                        except:
+                            print(partition_start, partition_end)
+                            raise
+                
+                for triangle in mesh2.triangles:
+                    vertices = mesh2.vertices[triangle]
+                    minx = np.min(vertices[:, 0])
+                    maxx = np.max(vertices[:, 0])
+                    partition_start = int((minx - total_minx)//step)
+                    partition_end = int((maxx - total_minx)//step)
+                    for i in range(partition_start, partition_end):
+                        partitions2[i].append(triangle)
+                
+                # print(partitions1)
+                # for p in partitions1:
+                #     print(len(p))
+                
+                # return
+                # for i in range(number_of_partitions):
+                for i in tqdm.tqdm(range(number_of_partitions), desc="outer loop"):
+                    # for t1 in partitions1[i]:
+                    for t1 in tqdm.tqdm(partitions1[i], desc="inner loop"):
+                        
+                        for t2 in partitions2[i]:
+                            triangle1 = mesh1.vertices[t1]
+                            triangle2 = mesh2.vertices[t2]
+                            if Triangle3D(triangle1[0], triangle1[1], triangle1[2]).collides_triangle(Triangle3D(triangle2[0], triangle2[1], triangle2[2])):
+                                print(f"{uav1.name} collides with {uav2.name}")
+                                collisions[(uav1.name, uav2.name)] = True
+                                colision = True
+                                break
+                        if colision:
+                            break
+                    if colision:
+                        break
+                if not colision:
+                    print(f"{uav1.name} does not collide with {uav2.name}")
+                else:
+                    print(f"{uav1.name} collides with {uav2.name}")
+
+
+        
+
+
 
 
 
@@ -560,15 +803,19 @@ class Airspace(Scene3D):
 
         if symbol == Key.L:
             # self.find_kdop_collisions()
-            self.find_aabb_collisions()
+            # self.find_aabb_collisions()
+            # self.find_mesh_collisions_slow()
+            # self.find_mesh_collisions_opt()
+            self.find_mesh_collisions_opt_new()
+            
 
         osprey = self.uavs["v22_osprey_0"]
         if symbol in [Key.UP, Key.DOWN, Key.LEFT, Key.RIGHT, Key.SPACE, Key.BACKSPACE]:
             # osprey.remove_kdop()
             if symbol == Key.UP:
-                osprey.move_by([0, 0, 0.1])
-            if symbol == Key.DOWN:
                 osprey.move_by([0, 0, -0.1])
+            if symbol == Key.DOWN:
+                osprey.move_by([0, 0, 0.1])
             if symbol == Key.LEFT:
                 osprey.move_by([-0.1, 0, 0])
             if symbol == Key.RIGHT:

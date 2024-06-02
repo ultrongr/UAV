@@ -2877,6 +2877,20 @@ class Triangle3D(Mesh3D):
         return np.dot(n, p1 - self.p1) * np.dot(n, p2 - self.p1) >= -0.0001
 
 
+    def collides_triangle(self, other:Triangle3D):
+        '''Checks if this triangle collides with another.
+
+        Args:
+            other: The other triangle to check for collision.
+        
+        Returns:
+            Whether the two triangles collide.
+        '''
+        other_lines = [Line3D(other.p1, other.p2), Line3D(other.p2, other.p3), Line3D(other.p3, other.p1)]
+        for line in other_lines:
+            if self.getLineIntersection(line) is not None:
+                return True
+
 
 class ConvexPolygon3D(Mesh3D):
     '''A class used to represent a convex polygon in 3D space. All points must be in the same plane.'''
@@ -3272,7 +3286,7 @@ class Polyhedron3D(Mesh3D):
             polygon.points = polygon.points + distance
     
 class AabbNode:
-    def __init__(self, points:NDArray, max_depth:int=8, depth:int=0):
+    def __init__(self, points:NDArray, max_depth:int=3, depth:int=0):
         self.points = points
         self.depth = depth
         self.center = np.mean(points, axis=0)
@@ -3314,7 +3328,7 @@ class AabbNode:
         
 
 
-    def collides(self, other:AabbNode):
+    def collides(self, other:AabbNode, show=False, scene=None):
         if self.minx > other.maxx or self.maxx < other.minx:
             return False
         if self.miny > other.maxy or self.maxy < other.miny:
@@ -3323,14 +3337,23 @@ class AabbNode:
             return False
         
         if len(self.children) == 0 and len(other.children) == 0:
+
+            if show and scene:
+                cuboid1 = Cuboid3D([self.minx, self.miny, self.minz], [self.maxx, self.maxy, self.maxz], color=(0, 0, 1, 0.5), width=4)
+                cuboid2 = Cuboid3D([other.minx, other.miny, other.minz], [other.maxx, other.maxy, other.maxz], color=(0, 0, 1, 0.5), width=4)
+                scene.removeShape("aabb_node_collision_1")
+                scene.removeShape("aabb_node_collision_2")
+                scene.addShape(cuboid1, name="aabb_node_collision_1")
+                scene.addShape(cuboid2, name="aabb_node_collision_2")
+                print("showing collision")
             return True
         
         for i in range(8):
             for j in range(8):
                 if self.children[i] is not None and other.children[j] is not None:
-                    if self.children[i].collides(other.children[j]):
+                    if self.children[i].collides(other.children[j], show, scene):
+                            
                         return True
-
         
         return False
     
