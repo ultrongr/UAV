@@ -8,7 +8,7 @@ import numpy as np
 from vvrpywork.constants import Key, Mouse, Color
 from vvrpywork.scene import Scene2D, Scene3D, get_rotation_matrix, world_space
 from vvrpywork.shapes import (
-    Point2D, Line2D, Triangle2D, Circle2D, Rectangle2D,
+    NDArray, Point2D, Line2D, Triangle2D, Circle2D, Rectangle2D,
     PointSet2D, LineSet2D, Polygon2D,
     Point3D, Line3D, Arrow3D, Sphere3D, Cuboid3D, Cuboid3DGeneralized,
     PointSet3D, LineSet3D, Mesh3D, Triangle3D, ConvexPolygon3D, Polyhedron3D,
@@ -51,7 +51,7 @@ class UAV:
         if not self._class in UAV.classes:
             UAV.classes[self._class] = 0
         self.name = f"{self._class}_{UAV.classes[self._class]}"
-        print(self.name)
+        print(self.name, f"{len(self.mesh.vertices)} vertices")
         UAV.classes[self._class] += 1
 
 
@@ -113,6 +113,19 @@ class UAV:
                 self.remove_kdop()
                 self.scene.addShape(box, self.name+"_kdop")
                 self.boxes["kdop"] = box
+            
+            elif box_name == "aabb":
+                box.translate(dist)
+                self.remove_aabb()
+                self.scene.addShape(box, self.name+"_aabb")
+                self.boxes["aabb"] = box
+            
+            elif box_name == "chull":
+                for vertex in box._shape.vertices:
+                    vertex += dist
+                self.remove_convex_hull()
+                self.scene.addShape(box, self.name+"_chull")
+                self.boxes["chull"] = box
                     
     
     def move_by(self, dist:np.ndarray):
@@ -196,7 +209,9 @@ class UAV:
     
     def create_kdop(self, k:int):
         "Create a k-dop around the UAV"
-        
+
+        self.boxes["kdop"] = Kdop(self.mesh.vertices, k, self.scene, name = self.name+"_kdop")
+        return
         implemented_values = [6, 14, 26]
         if k not in implemented_values:
             print(f"Only {implemented_values} are implemented")
@@ -442,10 +457,6 @@ class LandingPad:
                 pads.append(pad)
             self.pads.append(pads)
         self.pads = np.array(self.pads)
-            
-    
-
-
 
 class Airspace(Scene3D):
 
@@ -478,12 +489,14 @@ class Airspace(Scene3D):
     
     def find_kdop_collisions(self):
         collisions = {}
+        checked_pairs = {}
         for uav1 in self.uavs.values():
             for uav2 in self.uavs.values():
                 if uav1 == uav2:
                     continue
-                if (uav1.name, uav2.name) in collisions or (uav2.name, uav1.name) in collisions:
+                if (uav1.name, uav2.name) in checked_pairs or (uav2.name, uav1.name) in checked_pairs:
                     continue
+                checked_pairs[(uav1.name, uav2.name)] = True
                 created1 = False
                 created2 = False
                 if not uav1.boxes["kdop"]:
@@ -497,6 +510,7 @@ class Airspace(Scene3D):
                 if uav1.boxes["kdop"].collides_lines(uav2.boxes["kdop"], show=True, scene=self):
                     print(f"{uav1.name} collides with {uav2.name}")
                     collisions[(uav1.name, uav2.name)] = True
+                    
                 else:
                     print(f"{uav1.name} does not collide with {uav2.name}")
                 print(f"Collision check: {time.time()-time1:.2f}s")
@@ -545,8 +559,29 @@ class Airspace(Scene3D):
                 mesh1 = uav1.mesh
                 mesh2 = uav2.mesh
                 dist_cutoff = 0.1
-                for t1 in tqdm.tqdm(range(len(mesh1.triangles)), desc="outer loop"):
-                    for t2 in tqdm.tqdm(range(len(mesh2.triangles)), desc="inner loop"):
+                max_cords1 = np.max(mesh1.vertices, axis=0)
+                min_cords1 = np.min(mesh1.vertices, axis=0)
+                max_cords2 = np.max(mesh2.vertices, axis=0)
+                min_cords2 = np.min(mesh2.vertices, axis=0)
+                triangles_3d1 = []
+                triangles_3d2 = []
+                for i in range(len(mesh1.triangles)):
+                    triangle = mesh1.triangles[i]
+                    vertices = mesh1.vertices[triangle]
+                    if np.any(vertices > max_cords2) or np.any(vertices < min_cords2):
+                        continue
+                    triangles_3d1.append(Triangle3D(vertices[0], vertices[1], vertices[2]))
+                
+                for i in range(len(mesh2.triangles)):
+                    triangle = mesh2.triangles[i]
+                    vertices = mesh2.vertices[triangle]
+                    if np.any(vertices > max_cords1) or np.any(vertices < min_cords1):
+                        continue
+                    triangles_3d2.append(Triangle3D(vertices[0], vertices[1], vertices[2]))
+
+
+                for t1 in tqdm.tqdm(range(len(triangles_3d1)), desc="outer loop"):
+                    for t2 in range(len(triangles_3d2)):
                         
                         triangle1 = mesh1.triangles[t1]
                         triangle2 = mesh2.triangles[t2]
@@ -569,13 +604,15 @@ class Airspace(Scene3D):
                     print(f"{uav1.name} collides with {uav2.name}")
                 print(f"Collision check: {time.time()-time1:.2f}s")
 
-    def find_mesh_collisions_opt(self):
+    def find_mesh_collisions_random(self):
         import tqdm
         collisions = {}
         checked_pairs = {}
 
-        number_of_batches=2000
-        print(f"Optimized collision check, number of pieces: {number_of_batches}")
+        number_of_partitions: int = 20
+        percentage=0.1
+        step = int(1/percentage)
+        print(f"Random selective collision check, percentage: {percentage*100:.2f}%")
 
         for uav1 in self.uavs.values():
             for uav2 in self.uavs.values():
@@ -591,73 +628,74 @@ class Airspace(Scene3D):
                     continue
                 time1 = time.time()
 
+
                 mesh1 = uav1.mesh
                 mesh2 = uav2.mesh
 
-                batch_size = len(mesh1.triangles)//number_of_batches
-                batches1_min_cords=[]
-                batches1_max_cords=[]
-                batches2_min_cords=[]
-                batches2_max_cords=[]
-                for i in range(0, len(mesh1.triangles), batch_size):
-                    batch_triangles = mesh1.triangles[i:i+batch_size]
-                    indices_array = np.array(batch_triangles).flatten()
-                    batch_vertices = mesh1.vertices[indices_array]
-                    min_x = np.min(batch_vertices[:, 0])
-                    min_y = np.min(batch_vertices[:, 1])
-                    min_z = np.min(batch_vertices[:, 2])
-                    max_x = np.max(batch_vertices[:, 0])
-                    max_y = np.max(batch_vertices[:, 1])
-                    max_z = np.max(batch_vertices[:, 2])
-                    batches1_min_cords.append([min_x, min_y, min_z])
-                    batches1_max_cords.append([max_x, max_y, max_z])
-
-                for i in range(0, len(mesh2.triangles), batch_size):
-                    batch_triangles = mesh2.triangles[i:i+batch_size]
-                    indices_array = np.array(batch_triangles).flatten()
-                    batch_vertices = mesh2.vertices[indices_array]
-                    min_x = np.min(batch_vertices[:, 0])
-                    min_y = np.min(batch_vertices[:, 1])
-                    min_z = np.min(batch_vertices[:, 2])
-                    max_x = np.max(batch_vertices[:, 0])
-                    max_y = np.max(batch_vertices[:, 1])
-                    max_z = np.max(batch_vertices[:, 2])
-                    batches2_min_cords.append([min_x, min_y, min_z])
-                    batches2_max_cords.append([max_x, max_y, max_z])
+                space1 = np.ndarray((number_of_partitions+1, number_of_partitions+1, number_of_partitions+1), dtype=object)
+                space2 = np.ndarray((number_of_partitions+1, number_of_partitions+1, number_of_partitions+1), dtype=object)
+                for i in range(number_of_partitions+1):
+                    for j in range(number_of_partitions+1):
+                        for k in range(number_of_partitions+1):
+                            space1[i, j, k] = []
+                            space2[i, j, k] = []
                 
-                batches1_min_cords = np.array(batches1_min_cords)
-                batches1_max_cords = np.array(batches1_max_cords)
-                batches2_min_cords = np.array(batches2_min_cords)
-                batches2_max_cords = np.array(batches2_max_cords)
+                min1 = np.min(mesh1.vertices, axis=0)
+                max1 = np.max(mesh1.vertices, axis=0)
+                min2 = np.min(mesh2.vertices, axis=0)
+                max2 = np.max(mesh2.vertices, axis=0)
+
+                max_total = np.max([max1, max2], axis=0)
+                min_total = np.min([min1, min2], axis=0)
+
+                partition_size = (max_total - min_total) / number_of_partitions
 
 
-                # for i in tqdm.tqdm(range(len(batches1_min_cords)), desc="outer loop"):
-                for i in range(len(batches1_min_cords)):
-                    
-                    # for j in tqdm.tqdm(range(len(batches2_min_cords)), desc="inner loop"):
-                    for j in range(len(batches2_min_cords)):
-                        min1 = batches1_min_cords[i]
-                        max1 = batches1_max_cords[i]
-                        min2 = batches2_min_cords[j]
-                        max2 = batches2_max_cords[j]
-                        if not (min1[0] < max2[0] and max1[0] > min2[0] and
-                                min1[1] < max2[1] and max1[1] > min2[1] and
-                                min1[2] < max2[2] and max1[2] > min2[2]):
-                            continue
-                        for t1 in range(i*batch_size, (i+1)*batch_size):
-                            for t2 in range(j*batch_size, (j+1)*batch_size):
-                                triangle1 = mesh1.triangles[t1]
-                                triangle2 = mesh2.triangles[t2]
-                                v1 = mesh1.vertices[triangle1]
-                                v2 = mesh2.vertices[triangle2]
-                                if Triangle3D(v1[0], v1[1], v1[2]).collides_triangle(Triangle3D(v2[0], v2[1], v2[2])):
-                                    print(f"{uav1.name} collides with {uav2.name}")
-                                    collisions[(uav1.name, uav2.name)] = True
-                                    colision = True
+                for i in range(0, len(mesh1.triangles), step):
+                    triangle = mesh1.triangles[i]
+                    vertices = mesh1.vertices[triangle]
+                    if np.any(vertices > max2) or np.any(vertices < min2):
+                        continue
+                    min_vertex = np.min(vertices, axis=0)
+                    max_vertex = np.max(vertices, axis=0)
+                    min_index = ((min_vertex - min_total) / partition_size).astype(int)
+                    max_index = ((max_vertex - min_total) / partition_size).astype(int)
+                    for x in range(min_index[0], max_index[0]+1):
+                        for y in range(min_index[1], max_index[1]+1):
+                            for z in range(min_index[2], max_index[2]+1):
+                                space1[x, y, z].append(i)
+                
+                for i in range(0, len(mesh2.triangles), step):
+                    triangle = mesh2.triangles[i]
+                    vertices = mesh2.vertices[triangle]
+                    if np.any(vertices > max1) or np.any(vertices < min1):
+                        continue
+                    min_vertex = np.min(vertices, axis=0)
+                    max_vertex = np.max(vertices, axis=0)
+                    min_index = ((min_vertex - min_total) / partition_size).astype(int)
+                    max_index = ((max_vertex - min_total) / partition_size).astype(int)
+                    for x in range(min_index[0], max_index[0]+1):
+                        for y in range(min_index[1], max_index[1]+1):
+                            for z in range(min_index[2], max_index[2]+1):
+                                space2[x, y, z].append(i)
+
+                for i in tqdm.tqdm(range(number_of_partitions), desc="outer loop"):
+                    for j in range(number_of_partitions):
+                        for k in range(number_of_partitions):
+                            for t1 in space1[i, j, k]:
+                                for t2 in space2[i, j, k]:
+                                    triangle1 = mesh1.triangles[t1]
+                                    triangle2 = mesh2.triangles[t2]
+                                    v1 = mesh1.vertices[triangle1]
+                                    v2 = mesh2.vertices[triangle2]
+                                    if Triangle3D(v1[0], v1[1], v1[2]).collides_triangle(Triangle3D(v2[0], v2[1], v2[2])):
+                                        collisions[(uav1.name, uav2.name)] = True
+                                        colision = True
+                                        break
+                                if colision:
                                     break
-                            else:
-                                continue
-                            break
+                            if colision:
+                                break
                         if colision:
                             break
                     if colision:
@@ -667,15 +705,13 @@ class Airspace(Scene3D):
                 else:
                     print(f"{uav1.name} collides with {uav2.name}")
                 print(f"Collision check: {time.time()-time1:.2f}s")
-        print("End of optimized collision check")
 
-
-    def find_mesh_collisions_opt_new(self):
+    def find_mesh_collisions_opt(self):
         import tqdm
         collisions = {}
         checked_pairs = {}
 
-        number_of_partitions: int = 2000
+        number_of_partitions: int = 20
         print(f"New optimized collision check, number of pieces: {number_of_partitions}")
 
         for uav1 in self.uavs.values():
@@ -692,63 +728,81 @@ class Airspace(Scene3D):
                     continue
                 time1 = time.time()
 
-                
-                partitions_space = np.linspace(0, 4, number_of_partitions+1)
-                partitions1 = [[] for _ in range(number_of_partitions)]
-                partitions2 = [[] for _ in range(number_of_partitions)]
-
 
                 mesh1 = uav1.mesh
                 mesh2 = uav2.mesh
 
-                minx1 = np.min(mesh1.vertices[:, 0])
-                minx2 = np.min(mesh2.vertices[:, 0])
-                maxx1 = np.max(mesh1.vertices[:, 0])
-                maxx2 = np.max(mesh2.vertices[:, 0])
-                print(minx1, minx2)
-                print(maxx1, maxx2)
-                total_minx = min(minx1, minx2)
-                step = 4/number_of_partitions
+                min_cords1 = np.min(mesh1.vertices, axis=0)
+                max_cords1 = np.max(mesh1.vertices, axis=0)
+                min_cords2 = np.min(mesh2.vertices, axis=0)
+                max_cords2 = np.max(mesh2.vertices, axis=0)
 
-                for triangle in mesh1.triangles:
+                space1 = np.ndarray((number_of_partitions+1, number_of_partitions+1, number_of_partitions+1), dtype=object)
+                space2 = np.ndarray((number_of_partitions+1, number_of_partitions+1, number_of_partitions+1), dtype=object)
+                for i in range(number_of_partitions+1):
+                    for j in range(number_of_partitions+1):
+                        for k in range(number_of_partitions+1):
+                            space1[i, j, k] = []
+                            space2[i, j, k] = []
+                print(f"time1: {time.time()-time1:.2f}s")
+                
+                min1 = np.min(mesh1.vertices, axis=0)
+                max1 = np.max(mesh1.vertices, axis=0)
+                min2 = np.min(mesh2.vertices, axis=0)
+                max2 = np.max(mesh2.vertices, axis=0)
+
+                max_total = np.max([max1, max2], axis=0)
+                min_total = np.min([min1, min2], axis=0)
+
+                partition_size = (max_total - min_total) / number_of_partitions
+
+                for i in range(len(mesh1.triangles)):
+                    triangle = mesh1.triangles[i]
                     vertices = mesh1.vertices[triangle]
-                    minx = np.min(vertices[:, 0])
-                    maxx = np.max(vertices[:, 0])
-                    partition_start = int((minx - total_minx)//step)
-                    partition_end = int((maxx - total_minx)//step)
-                    for i in range(partition_start, partition_end):
-                        try:
-                            partitions1[i].append(triangle)
-                        except:
-                            print(partition_start, partition_end)
-                            raise
+                    if np.any(vertices > max_cords2) or np.any(vertices < min_cords2):
+                        continue
+                    min_vertex = np.min(vertices, axis=0)
+                    max_vertex = np.max(vertices, axis=0)
+                    min_index = ((min_vertex - min_total) / partition_size).astype(int)
+                    max_index = ((max_vertex - min_total) / partition_size).astype(int)
+                    for x in range(min_index[0], max_index[0]+1):
+                        for y in range(min_index[1], max_index[1]+1):
+                            for z in range(min_index[2], max_index[2]+1):
+                                space1[x, y, z].append(i)
+                print(f"time2: {time.time()-time1:.2f}s")
                 
-                for triangle in mesh2.triangles:
+                for i in range(len(mesh2.triangles)):
+                    triangle = mesh2.triangles[i]
                     vertices = mesh2.vertices[triangle]
-                    minx = np.min(vertices[:, 0])
-                    maxx = np.max(vertices[:, 0])
-                    partition_start = int((minx - total_minx)//step)
-                    partition_end = int((maxx - total_minx)//step)
-                    for i in range(partition_start, partition_end):
-                        partitions2[i].append(triangle)
-                
-                # print(partitions1)
-                # for p in partitions1:
-                #     print(len(p))
-                
-                # return
+                    if np.any(vertices > max_cords1) or np.any(vertices < min_cords1):
+                        continue
+                    min_vertex = np.min(vertices, axis=0)
+                    max_vertex = np.max(vertices, axis=0)
+                    min_index = ((min_vertex - min_total) / partition_size).astype(int)
+                    max_index = ((max_vertex - min_total) / partition_size).astype(int)
+                    for x in range(min_index[0], max_index[0]+1):
+                        for y in range(min_index[1], max_index[1]+1):
+                            for z in range(min_index[2], max_index[2]+1):
+                                space2[x, y, z].append(i)
+                print(f"time3: {time.time()-time1:.2f}s")
+
                 # for i in range(number_of_partitions):
                 for i in tqdm.tqdm(range(number_of_partitions), desc="outer loop"):
-                    # for t1 in partitions1[i]:
-                    for t1 in tqdm.tqdm(partitions1[i], desc="inner loop"):
-                        
-                        for t2 in partitions2[i]:
-                            triangle1 = mesh1.vertices[t1]
-                            triangle2 = mesh2.vertices[t2]
-                            if Triangle3D(triangle1[0], triangle1[1], triangle1[2]).collides_triangle(Triangle3D(triangle2[0], triangle2[1], triangle2[2])):
-                                print(f"{uav1.name} collides with {uav2.name}")
-                                collisions[(uav1.name, uav2.name)] = True
-                                colision = True
+                    for j in range(number_of_partitions):
+                        for k in range(number_of_partitions):
+                            for t1 in space1[i, j, k]:
+                                for t2 in space2[i, j, k]:
+                                    triangle1 = mesh1.triangles[t1]
+                                    triangle2 = mesh2.triangles[t2]
+                                    v1 = mesh1.vertices[triangle1]
+                                    v2 = mesh2.vertices[triangle2]
+                                    if Triangle3D(v1[0], v1[1], v1[2]).collides_triangle(Triangle3D(v2[0], v2[1], v2[2])):
+                                        collisions[(uav1.name, uav2.name)] = True
+                                        colision = True
+                                        break
+                                if colision:
+                                    break
+                            if colision:
                                 break
                         if colision:
                             break
@@ -758,7 +812,71 @@ class Airspace(Scene3D):
                     print(f"{uav1.name} does not collide with {uav2.name}")
                 else:
                     print(f"{uav1.name} collides with {uav2.name}")
+                print(f"Collision check: {time.time()-time1:.2f}s")
 
+    def find_chull_collisions(self):
+        import tqdm
+        collisions = {}
+        for uav1 in self.uavs.values():
+            for uav2 in self.uavs.values():
+                if uav1 == uav2:
+                    continue
+                if (uav1.name, uav2.name) in collisions or (uav2.name, uav1.name) in collisions:
+                    continue
+                created1 = False
+                created2 = False
+                if not uav1.boxes["chull"]:
+                    created1 = True
+                    uav1.create_convex_hull()
+                if not uav2.boxes["chull"]:
+                    created2 = True
+                    uav2.create_convex_hull()
+                import time
+                time1 = time.time()
+                collision = False
+
+                # for t1 in uav1.boxes["chull"].triangles:
+                print(f"Number of triangles1: {len(uav1.boxes['chull'].triangles)}")
+                print(f"Number of triangles2: {len(uav2.boxes['chull'].triangles)}")
+                triangle_3d_1 =[]
+                triangle_3d_2 =[]
+                max_cords_1 = np.max(uav1.mesh.vertices, axis=0)
+                min_cords_1 = np.min(uav1.mesh.vertices, axis=0)
+                max_cords_2 = np.max(uav2.mesh.vertices, axis=0)
+                min_cords_2 = np.min(uav2.mesh.vertices, axis=0)
+                for t1 in uav1.boxes["chull"].triangles:
+                    v1 = uav1.boxes["chull"].vertices[t1]
+                    if np.any(v1>max_cords_2) or np.any(v1<min_cords_2):
+                        continue
+                    triangle1 = Triangle3D(v1[0], v1[1], v1[2])
+                    triangle_3d_1.append(triangle1)
+                for t2 in uav2.boxes["chull"].triangles:
+                    v2 = uav2.boxes["chull"].vertices[t2]
+                    if np.any(v2>max_cords_1) or np.any(v2<min_cords_1):
+                        continue
+                    triangle2 = Triangle3D(v2[0], v2[1], v2[2])
+                    triangle_3d_2.append(triangle2)
+                for triangle1 in tqdm.tqdm(triangle_3d_1, desc="outer loop"):
+                    for triangle2 in triangle_3d_2:
+                        if triangle1.collides_triangle(triangle2):
+                            print(f"{uav1.name} collides with {uav2.name}")
+                            collisions[(uav1.name, uav2.name)] = True
+                            collision = True
+                            break
+                    if collision:
+                        break
+                if not collision:
+                    print(f"{uav1.name} does not collide with {uav2.name}")
+                else:
+                    print(f"{uav1.name} collides with {uav2.name}")
+
+
+                print(f"Collision check: {time.time()-time1:.2f}s")
+                if created1:
+                    uav1.remove_convex_hull()
+                if created2:
+                    uav2.remove_convex_hull()
+               
 
         
 
@@ -802,11 +920,13 @@ class Airspace(Scene3D):
                     uav.create_kdop(kdop_number)
 
         if symbol == Key.L:
-            # self.find_kdop_collisions()
+            self.find_kdop_collisions()
             # self.find_aabb_collisions()
+            # self.find_chull_collisions()
             # self.find_mesh_collisions_slow()
             # self.find_mesh_collisions_opt()
-            self.find_mesh_collisions_opt_new()
+            # self.find_mesh_collisions_random()
+            
             
 
         osprey = self.uavs["v22_osprey_0"]
@@ -841,10 +961,225 @@ class Airspace(Scene3D):
         else:
             self.updateShape(uav.mesh, uav.name)
 
+class Kdop(Polyhedron3D):
 
-       
-                
+    def __init__(self, vertices:np.ndarray, k:int, scene:Scene3D, name:str) -> None:
+        self.pc_vertices = vertices
+        self.k = k
+        self.scene = scene
+        self.name = name
+        self.aircraft_class = None
+
+        self.create_kdop()
+
+    def create_kdop(self):
+        if self.k == 6:
+            self.create_6dop()
+            return
+        if self.k == 14:
+            self.create_14dop()
+            return
+    
+    def create_6dop(self):
+        "Create a 6-dop"
+
+        min_x, min_y, min_z = np.min(self.pc_vertices, axis=0)
+        max_x, max_y, max_z = np.max(self.pc_vertices, axis=0)
+        faces = [
+            [[min_x, min_y, min_z], [max_x, min_y, min_z], [max_x, max_y, min_z], [min_x, max_y, min_z]],
+            [[min_x, min_y, min_z], [min_x, max_y, min_z], [min_x, max_y, max_z], [min_x, min_y, max_z]],
+            [[min_x, min_y, min_z], [min_x, min_y, max_z], [max_x, min_y, max_z], [max_x, min_y, min_z]],
+            [[max_x, max_y, min_z], [max_x, min_y, min_z], [max_x, min_y, max_z], [max_x, max_y, max_z]],
+            [[max_x, max_y, min_z], [max_x, max_y, max_z], [min_x, max_y, max_z], [min_x, max_y, min_z]],
+            [[max_x, max_y, max_z], [max_x, min_y, max_z], [min_x, min_y, max_z], [min_x, max_y, max_z]],
+        ]
+        polygons = []
+        for face in faces:
+            polygon = ConvexPolygon3D(np.array(face), color=Color.RED)
+            polygons.append(polygon)
+        
+        super().__init__(polygons, color=Color.RED, name = self.name)
+
+        self.scene.addShape(self, self.name)
+    
+    def create_14dop(self):
+        "Create a 14-dop "
+
+        import time
+
+        def find_intersection(plane1, plane2, plane3):
             
+            A = np.array([plane1[:3], plane2[:3], plane3[:3]])
+            b = np.array([-plane1[3], -plane2[3], -plane3[3]])
+            x = np.linalg.solve(A, b)
+            return x
+
+        def check_if_neighbor(corner_dir, face_dir):
+            for i in range(3):
+                if face_dir[i] != 0:
+                    if corner_dir[i]==face_dir[i]:
+                        return True
+            return False
+        
+        def plane_equation_from_point_normal(point, normal):
+            # Normalize the normal vector
+            unit_normal = normal / np.linalg.norm(normal)
+            
+            # Extract components
+            a, b, c = unit_normal
+            x0, y0, z0 = point
+            
+            # Calculate d using the point on the plane
+            d = -(a*x0 + b*y0 + c*z0)
+            
+            # Return the coefficients of the plane equation
+            return [a, b, c, d]
+        
+        directions = [
+            [1, 0, 0],
+            [0, 1, 0],
+            [0, 0, 1],
+            [1, 1, 1],
+            [1, 1, -1],
+            [1, -1, 1],
+            [1, -1, -1],
+
+            [-1, 0, 0],
+            [0, -1, 0],
+            [0, 0, -1],
+            [-1, 1, 1],
+            [-1, 1, -1],
+            [-1, -1, 1],
+            [-1, -1, -1],
+
+        ]
+
+        start = time.time()
+
+        points = []
+        
+        directions_to_vertices = {} # Mapping the each direction to the furthest vertex in that direction
+        for direction in directions[:7]: # The other half will be the min vertices
+            max_val = -np.inf
+            max_vertex = None
+            min_val = np.inf
+            min_vertex = None
+            for vertex in self.pc_vertices:
+                val = np.dot(vertex, direction)
+                if val > max_val:
+                    max_val = val
+                    max_vertex = vertex
+                if val < min_val:
+                    min_val = val
+                    min_vertex = vertex
+            directions_to_vertices[tuple(direction)] = max_vertex
+            directions_to_vertices[tuple(np.array(direction)*-1)] = min_vertex
+        
+
+        triangles = [] # Finding the triangles that are formed by the intersection of the corner planes with the faces
+        for dir in directions_to_vertices.keys():
+            if 0 in dir: # Only going for corners
+                continue
+
+            v = directions_to_vertices[dir] # Furthest vertex in the direction
+            plane = plane_equation_from_point_normal(v, dir) # Plane equation of the corner
+            face_planes = [] # Planes of the faces that are neighbors of the corner
+            for dir2 in directions_to_vertices.keys():
+                if not 0 in dir2: # Only going for faces
+                    continue
+                # Check if the corner is a neighbor of the face
+                if not check_if_neighbor(dir, dir2):
+                    continue
+                plane2 = plane_equation_from_point_normal(directions_to_vertices[dir2], dir2)
+                face_planes.append(plane2)
+
+            temp_points=[] # To avoid duplicate points
+            for plane2 in face_planes:
+                for plane3 in face_planes:
+                    if plane2 == plane3:
+                        continue
+                    point = find_intersection(plane, plane2, plane3) # Intersection of the corner with the faces
+                    for temp_p in temp_points:
+                        if np.linalg.norm(temp_p - point) < 0.001: # Dont add duplicate points
+                            break
+                    else:
+                        points.append(point)
+                        temp_points.append(point)
+            triangle = Triangle3D(p1=temp_points[0], p2=temp_points[1], p3=temp_points[2], color=Color.RED)
+            
+            triangles.append(triangle)
+
+
+        mesh_point = np.mean(self.pc_vertices, axis=0) # The center of the mesh, used to check if other points are inside the kdop
+        points_to_remove = [] # Points of the triangles that are not inside the kdop
+        valid_points = [] # Points that are inside the kdop
+        for p in points:            
+            for triangle in triangles:
+                if not triangle.points_on_same_side(mesh_point, p): # Check if the point is inside the kdop
+                    points_to_remove.append(p)
+                    break
+            else:
+                valid_points.append(p)
+
+        intersections=[] # The intersections of the triangles that define the kdop
+        for triangle in triangles:
+
+            lines = [Line3D(triangle.p1, triangle.p2), Line3D(triangle.p2, triangle.p3), Line3D(triangle.p3, triangle.p1)] 
+            for other_triangle in triangles:
+                if triangle == other_triangle:
+                    continue
+                
+                for line in lines:
+                    intersection = other_triangle.getLineIntersection(line)
+                    
+                    if intersection is not None:
+                        intersections.append(intersection)
+
+        for point in intersections: # Now valid_points will contain all the points that define the kdop
+            valid_points.append(point)
+
+        
+        dop_faces=[]
+        dop_polygons = []
+
+
+
+        for direction in directions: # For each direction, find the points that are on the plane 
+                                                           # defined by the direction and create a face of the kdop
+            dop_face_points=[]
+            v = directions_to_vertices[tuple(direction)]
+            plane = plane_equation_from_point_normal(v, direction)
+            a, b, c, d = plane
+            for i, p in enumerate(valid_points):
+                
+                if np.abs(a*p[0] + b*p[1] + c*p[2] + d) < 0.01: # Point is on the plane defined by the direction
+                    for other_p in dop_face_points:
+                        if np.linalg.norm(p - other_p) < 0.0001: # Point is already in the face
+                            break
+                    else:
+                        dop_face_points.append(p)
+
+
+          
+            dop_faces.append(dop_face_points)
+            dop_face_points=np.array(dop_face_points)
+            face_polygon = ConvexPolygon3D(dop_face_points, normal=direction,color=Color.RED) # The face of the kdop corresponding to the direction
+            dop_polygons.append(face_polygon)
+        
+        super().__init__(dop_polygons, color=Color.RED, name = self.name) 
+        self.scene.addShape(self, self.name)
+
+
+        
+        
+
+        print(f"14DOP: {time.time()-start:.2f}s")
+       
+    def remove(self):
+        self.scene.removeShape(self.name)     
+    
+
+    
 
 def main():
 

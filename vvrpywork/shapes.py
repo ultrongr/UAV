@@ -2769,18 +2769,9 @@ class Triangle3D(Mesh3D):
     def __eq__(self, other:Triangle3D) :
         return np.array_equal(self.p1, other.p1) and np.array_equal(self.p2, other.p2) and np.array_equal(self.p3, other.p3)
     
-    # def intersects(self, other:Triangle3D) :
-    #     '''Checks if this triangle intersects with another.
 
-    #     Args:
-    #         other: The other triangle to check for intersection.
-        
-    #     Returns:
-    #         Whether the two triangles intersect.
-    #     '''
-    #     return self.points_on_same_side(other.p1, other.p2) and self.points_on_same_side(other.p2, other.p3) and self.points_on_same_side(other.p3, other.p1)
     
-    def containsPoint(self, p:NDArray):
+    def containsPoint(self, p) :
         '''Checks if the triangle contains a point.
 
         Args:
@@ -2792,27 +2783,31 @@ class Triangle3D(Mesh3D):
         p0 = self.p1
         p1 = self.p2
         p2 = self.p3
-        v0 = [p2[0] - p0[0], p2[1] - p0[1]]
-        v1 = [p1[0] - p0[0], p1[1] - p0[1]]
-        v2 = [p[0] - p0[0], p[1] - p0[1]]
+        p = np.array(p)
+
+        # Vectors from p0 to p1/p2
+        v0 = p2 - p0
+        v1 = p1 - p0
+        v2 = p - p0
 
         # Compute dot products
-        dot00 = v0[0] * v0[0] + v0[1] * v0[1]
-        dot01 = v0[0] * v1[0] + v0[1] * v1[1]
-        dot02 = v0[0] * v2[0] + v0[1] * v2[1]
-        dot11 = v1[0] * v1[0] + v1[1] * v1[1]
-        dot12 = v1[0] * v2[0] + v1[1] * v2[1]
+        dot00 = np.dot(v0, v0)
+        dot01 = np.dot(v0, v1)
+        dot02 = np.dot(v0, v2)
+        dot11 = np.dot(v1, v1)
+        dot12 = np.dot(v1, v2)
 
         # Compute barycentric coordinates
-        if (dot00 * dot11 - dot01 * dot01) == 0:
+        denom = dot00 * dot11 - dot01 * dot01
+        if denom == 0:
             return False
-        inv_denom = 1 / (dot00 * dot11 - dot01 * dot01)
+        inv_denom = 1 / denom
         u = (dot11 * dot02 - dot01 * dot12) * inv_denom
         v = (dot00 * dot12 - dot01 * dot02) * inv_denom
 
-        # Check if point is inside the triangle
-        e=0.001
-        return (u >= -e) and (v >= -e) and (u + v <= 1+e)
+        # Check if point is inside the triangle with a tolerance for numerical precision
+        e = 1e-6
+        return (u >= -e) and (v >= -e) and (u + v <= 1 + e)
 
 
     
@@ -3083,7 +3078,20 @@ class ConvexPolygon3D(Mesh3D):
         t = numerator / denominator
         intersection_point = line_point + t * line_dir
 
-        return intersection_point if t >= 0 and t <= 1 else None
+
+        if t<0 or t>1:
+            return None
+        
+        # Check if the intersection point is inside the polygon
+        for i,tr in enumerate(self._shape.triangles):
+            triangle = self.vertices[tr]
+            triangle = Triangle3D(triangle[0], triangle[1], triangle[2])
+            if triangle.containsPoint(intersection_point):
+                return intersection_point
+        
+        return None
+
+        # return intersection_point if t >= 0 and t <= 1 else None
 
 
 
@@ -3213,17 +3221,24 @@ class Polyhedron3D(Mesh3D):
             for shape in shapes:
                 scene.removeShape(shape)
 
-
+        counter1=0
         for polygon in self._polygons:
+            counter1+=1
+            counter2=0
             for other_polygon in other._polygons:
+                counter2+=1
                 other_lines = [Line3D(other_polygon.points[i], other_polygon.points[i+1]) for i in range(1, len(other_polygon.points)-1)]
+                line_counter=0
                 for line in other_lines:
+                    line_counter+=1
                     intersection = polygon.intersects_line(line)
                     if intersection is None:
                         continue
+                    # print("Collision detected")
+                    # print("Counter1:", counter1, "Counter2:", counter2, "Line Counter:", line_counter)
                     if show and scene:
-                        print("Collision detected")
-                        print("intersection", intersection)
+                        # print("Collision detected")
+                        # print("intersection", intersection)
                         copy_intersection = Point3D(intersection, color=(0, 0, 1), size=3)
                         scene.addShape(copy_intersection, name="collision_intersection")
 
