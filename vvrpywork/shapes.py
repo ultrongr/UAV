@@ -2636,6 +2636,15 @@ class Mesh3D(ShapeSet):
         self._shape.vertices = o3d.utility.Vector3dVector(vertices)
 
     @property
+    def position(self) -> NDArray:
+        '''The position of the mesh's center.'''
+        return np.mean(self.vertices, axis=0)
+    
+    @position.setter
+    def position(self, position:NDArray|List|Tuple):
+        self._shape.translate(position - self.position)
+
+    @property
     def triangles(self) -> NDArray:
         '''The triangles (as indices to `points`) of the mesh.'''
         return np.copy(np.asarray(self._shape.triangles))
@@ -3217,9 +3226,15 @@ class Polyhedron3D(Mesh3D):
 
         # Remove previous collision shapes
         if show and scene:
+            other_name = other.name
+            name = self.name
+            pair = f"{name} + {other_name}: "
+            other_pair = f"{other_name} + {name}: "
             shapes = ["collision_intersection", "collision_line", "collision_polygon", "collision_other_polygon"]
             for shape in shapes:
-                scene.removeShape(shape)
+                scene.removeShape(pair+shape)
+                scene.removeShape(other_pair+shape)
+
 
         counter1=0
         for polygon in self._polygons:
@@ -3240,16 +3255,16 @@ class Polyhedron3D(Mesh3D):
                         # print("Collision detected")
                         # print("intersection", intersection)
                         copy_intersection = Point3D(intersection, color=(0, 0, 1), size=3)
-                        scene.addShape(copy_intersection, name="collision_intersection")
+                        scene.addShape(copy_intersection, name=pair +"collision_intersection")
 
                         copy_line = Line3D(line.getPointFrom(), line.getPointTo(), width = 2, color=(0, 0, 1))
-                        scene.addShape(copy_line, name="collision_line")
+                        scene.addShape(copy_line, name=pair +"collision_line")
 
                         copy_polygon = ConvexPolygon3D(polygon.points[1:], color=(0, 0, 1))
-                        scene.addShape(copy_polygon, name="collision_polygon")
+                        scene.addShape(copy_polygon, name=pair +"collision_polygon")
 
                         other_copy_polygon = ConvexPolygon3D(other_polygon.points[1:], color=(0, 0, 1))
-                        scene.addShape(other_copy_polygon, name="collision_other_polygon")
+                        scene.addShape(other_copy_polygon, name= pair + "collision_other_polygon")
                     return True
 
 
@@ -3288,8 +3303,6 @@ class Polyhedron3D(Mesh3D):
             # print("Added polygon", name+f"_face_{i}")
         scene._shapeDict[name] = self
     
-
-
     
     def move_by(self, distance:NDArray):
         # self._shape.translate(distance)
@@ -3299,7 +3312,22 @@ class Polyhedron3D(Mesh3D):
             # polygon.vertices = polygon.vertices + distance
             # polygon.center = polygon.center + distance
             polygon.points = polygon.points + distance
-    
+
+    def rotate(self, R:NDArray , center:NDArray):
+        # print(self.vertices)
+        self.vertices-=center
+        self.vertices = np.dot(self.vertices, R)
+        self.vertices+=center
+        print("Rotating", center)
+        # print(self.vertices)
+
+        for polygon in self._polygons:
+            polygon.points-=center
+            polygon.points = np.dot(polygon.vertices, R)
+            polygon.points+=center
+            print()
+
+
 class AabbNode:
     def __init__(self, points:NDArray, max_depth:int=3, depth:int=0):
         self.points = points

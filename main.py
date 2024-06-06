@@ -71,6 +71,8 @@ class UAV:
         }
 
         self.position = np.mean(self.mesh.vertices, axis=0)
+        self.direction = np.array([0, 0, -1])
+        
         if position:            
             self.move_to(position)
         
@@ -136,14 +138,52 @@ class UAV:
     
     def move_by(self, dist:np.ndarray):
         "Move the UAV by the specified distance"
-        # print(self.boxes["kdop"])
         self.move_to(self.position + dist)
 
     def rotate(self, angle:float, axis:np.ndarray):
-        "Rotate the UAV by the specified angle around the specified axis"
+        "Rotate the UAV by the speciied angle around the specified axis"
+        old_position = self.position
+        self.move_by(-self.position)
         R = get_rotation_matrix(angle, axis)
         self.mesh.vertices = np.dot(self.mesh.vertices, R)
+
+        self.move_by(old_position)
+
         self.mesh._update(self.name, self.scene)
+        self.position = old_position
+        self.direction = np.dot(self.direction, R)
+
+
+        for box_name in self.boxes.keys():
+            if not self.boxes.get(box_name):
+                continue
+            box = self.boxes[box_name]
+
+            if box_name == "aabb":
+                
+                self.boxes["aabb"]=None           
+
+                if self.boxes_visibility[box_name]:
+                    self.remove_aabb()
+                    self.create_aabb()
+            
+            elif box_name == "kdop":
+                box.rotate(R, self.position)
+                if self.boxes_visibility[box_name]:
+                    self.remove_kdop()
+                    self.create_kdop(kdop_number)
+            
+            elif box_name == "chull":
+                box.vertices-=self.position
+                box.vertices = np.dot(box.vertices, R)
+                box.vertices+=self.position
+                if self.boxes_visibility[box_name]:
+                    self.remove_convex_hull()
+                    self.create_convex_hull()
+
+
+
+        
 
 
 
@@ -199,7 +239,6 @@ class UAV:
         "Create a convex hull around the UAV"
 
         if self.boxes["chull"]:
-            print("test1")
             self.boxes_visibility["chull"] = True
             self.scene.addShape(self.boxes["chull"], self.name+"_chull")
             return
@@ -233,7 +272,6 @@ class UAV:
         if not self.boxes.get("kdop"):
             vertices = self.mesh.vertices
             kdop = Kdop(vertices, k, self.scene, self.name + "_kdop", self)
-            self.scene.addShape(kdop, self.name+"_kdop")
             self.boxes["kdop"] = kdop
             self.boxes_visibility["kdop"] = True
         else:
@@ -242,10 +280,6 @@ class UAV:
             # for i, face in enumerate(self.boxes["kdop"]._polygons):
             #     self.scene.addShape(face, self.name+"_kdop_face_"+str(i))
             return
-
-
-        
-
 
     def remove_kdop(self):
         if not self.boxes.get("kdop"):
@@ -260,6 +294,7 @@ class UAV:
         self.boxes_visibility["kdop"] = False
         
         # self.boxes["kdop"] = None
+
 
 class LandingPad:
     def __init__(self, N:int, scene:Scene3D) -> None:
@@ -309,7 +344,7 @@ class Airspace(Scene3D):
         filename2 = f"models/{model2}.obj"
         uav1 = UAV(self, filename1, position=[1.5, 1, 0], scale=None)
         # uav2 = UAV(self, filename2, position=[0, 1, 0], scale=None)
-        # uav3 = UAV(self, filename1, position=[1.5, 1, 1.5], scale=None)
+        uav3 = UAV(self, filename1, position=[1.5, 1, 1.5], scale=None)
 
     
     def find_kdop_collisions(self):
@@ -703,18 +738,9 @@ class Airspace(Scene3D):
                     uav2.remove_convex_hull()
                
 
-        
-
-
-
-
-
-
-
     def on_key_press(self, symbol, modifiers):
 
         if symbol == Key.C:
-            print("c")
             for uav in self.uavs.values():
                 if uav.boxes_visibility["chull"]:
                     uav.remove_convex_hull()
@@ -754,8 +780,8 @@ class Airspace(Scene3D):
             
             
 
-        osprey = self.uavs["v22_osprey_0"]
-        if symbol in [Key.UP, Key.DOWN, Key.LEFT, Key.RIGHT, Key.SPACE, Key.BACKSPACE]:
+        osprey:UAV = self.uavs["v22_osprey_0"]
+        if symbol in [Key.UP, Key.DOWN, Key.LEFT, Key.RIGHT, Key.SPACE, Key.BACKSPACE, Key.R]:
             # osprey.remove_kdop()
             if symbol == Key.UP:
                 osprey.move_by([0, 0, -0.1])
@@ -769,8 +795,8 @@ class Airspace(Scene3D):
                 osprey.move_by([0, 0.1, 0])
             if symbol == Key.BACKSPACE:
                 osprey.move_by([0, -0.1, 0])
-            # osprey.create_kdop(kdop_number)
-            # self.find_kdop_collisions()
+            if symbol == Key.R:
+                osprey.rotate(np.pi/4, [0, 1, 0])
     
     def addUAV(self, uav:UAV):
         self.uavs[uav.name] = uav
@@ -788,7 +814,7 @@ class Airspace(Scene3D):
 
 class Kdop(Polyhedron3D):
 
-    classes_to_kdop:dict[str, (np.ndarray, "Kdop")] = {}
+    classes_to_kdop:dict[str, (np.ndarray, np.ndarray, "Kdop")] = {}
 
     def __init__(self, vertices:np.ndarray, k:int, scene:Scene3D, name:str, uav:UAV = None) -> None:
         self.pc_vertices = vertices
@@ -797,13 +823,12 @@ class Kdop(Polyhedron3D):
         self.name = name
         self.uav = uav
 
-        print("kdop init called")
-        
+
         self.create_kdop()
 
         if self.uav:
             
-            # Kdop.classes_to_kdop[self.uav._class] = (self.uav.position, self)
+            Kdop.classes_to_kdop[self.uav._class] = (self.uav.position, self.uav.direction, self)
             return
         
 
@@ -816,7 +841,6 @@ class Kdop(Polyhedron3D):
                 self.create_from_class()
                 print("created from class")
                 return
-        print(":)")
         if self.k == 6:
             self.create_6dop()
             return
@@ -1025,16 +1049,22 @@ class Kdop(Polyhedron3D):
 
         print(f"Creating Kdop from class {self.uav._class}")
         time1 = time.time()
-        other_uav_position, other_kdop = Kdop.classes_to_kdop[self.uav._class]
+        other_uav_position, other_uav_direction, other_kdop = Kdop.classes_to_kdop[self.uav._class]
         other_polygons = other_kdop._polygons
         new_polygons = []
         for polygon in other_polygons:
-            new_polygon = ConvexPolygon3D(np.array(polygon.vertices), color=Color.RED)
+            new_vertices = list(polygon.points)[1:]
+            new_polygon = ConvexPolygon3D(np.array(new_vertices), color=Color.RED)
             new_polygons.append(new_polygon)
+            
         new_uav_position = self.uav.position
 
-        super().__init__(other_polygons, color=Color.RED, name = self.name)
+        super().__init__(new_polygons, color=Color.RED, name = self.name)
         self.move_by(new_uav_position - other_uav_position)
+        angle = np.arccos(np.dot(self.uav.direction, other_uav_direction))
+        axis = np.cross(self.uav.direction, other_uav_direction)
+        R = get_rotation_matrix(angle, axis)
+        self.rotate(R, new_uav_position)
         if self.scene:
             self.scene.addShape(self, self.name)
         print(f"Cached kdop creation time: {time.time()-time1:.2f}s")
@@ -1048,8 +1078,12 @@ class Kdop(Polyhedron3D):
     def move_by(self, distance: NDArray):
         super().move_by(distance)
         if self.uav:
-            Kdop.classes_to_kdop[self.uav._class] = (self.uav.position, self)
+            Kdop.classes_to_kdop[self.uav._class] = (self.uav.position, self.uav.direction, self)
     
+    def rotate(self, R:NDArray , center:NDArray):
+        super().rotate(R, center)
+        if self.uav and "_0" in self.uav._class:
+            Kdop.classes_to_kdop[self.uav._class] = (self.uav.position, self.uav.direction, self)
 
 def main():
 
