@@ -433,6 +433,8 @@ class Scene3D:
 def get_rotation_matrix(angle, axis) -> np.ndarray:
     if isinstance(axis, (np.ndarray, list, tuple)):
         axis = np.array(axis)
+        if np.linalg.norm(axis) == 0:
+            return np.eye(3)
         axis = axis / np.linalg.norm(axis)
         return o3d.geometry.get_rotation_matrix_from_axis_angle(angle * axis)
     else:

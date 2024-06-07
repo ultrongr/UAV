@@ -2860,7 +2860,10 @@ class Triangle3D(Mesh3D):
             # Check if it is inside the triangle
             if self.containsPoint(intersection):
                 return intersection
-            
+
+    def getPoints(self) -> NDArray:
+        '''Returns the points of the triangle.'''
+        return np.array([self.p1, self.p2, self.p3])
 
         
 
@@ -3318,21 +3321,20 @@ class Polyhedron3D(Mesh3D):
         self.vertices-=center
         self.vertices = np.dot(self.vertices, R)
         self.vertices+=center
-        print("Rotating", center)
         # print(self.vertices)
 
         for polygon in self._polygons:
             polygon.points-=center
             polygon.points = np.dot(polygon.vertices, R)
             polygon.points+=center
-            print()
 
 
 class AabbNode:
-    def __init__(self, points:NDArray, max_depth:int=3, depth:int=0):
+    def __init__(self, points:NDArray, max_depth:int=3, depth:int=0, uav_name=None):
         self.points = points
         self.depth = depth
         self.center = np.mean(points, axis=0)
+        self.uav_name = uav_name
         self.minx = np.min(points[:, 0])
         self.miny = np.min(points[:, 1])
         self.minz = np.min(points[:, 2])
@@ -3384,11 +3386,9 @@ class AabbNode:
             if show and scene:
                 cuboid1 = Cuboid3D([self.minx, self.miny, self.minz], [self.maxx, self.maxy, self.maxz], color=(0, 0, 1, 0.5), width=4)
                 cuboid2 = Cuboid3D([other.minx, other.miny, other.minz], [other.maxx, other.maxy, other.maxz], color=(0, 0, 1, 0.5), width=4)
-                scene.removeShape("aabb_node_collision_1")
-                scene.removeShape("aabb_node_collision_2")
-                scene.addShape(cuboid1, name="aabb_node_collision_1")
-                scene.addShape(cuboid2, name="aabb_node_collision_2")
-                print("showing collision")
+                pair = f"{self.uav_name}+{other.uav_name}:"
+                scene.addShape(cuboid1, name=pair+"aabb_node_collision_1")
+                scene.addShape(cuboid2, name=pair+"aabb_node_collision_2")
             return True
         
         for i in range(8):

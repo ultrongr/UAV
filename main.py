@@ -66,12 +66,14 @@ class UAV:
             "chull": None,
             "sphere": None,
             "kdop": None,
+            "aabb_node": None,
         }
         self.boxes_visibility = {
             "aabb": False,
             "chull": False,
             "sphere": False,
             "kdop": False,
+            "aabb_node": False,
         }
 
         self.position = np.mean(self.mesh.vertices, axis=0)
@@ -85,23 +87,7 @@ class UAV:
     def __eq__(self, other):
         return self.name == other.name
 
-    def update_boxes(self):
-        create_methods_dict = {
-            "aabb": self.create_aabb,
-            "chull": self.create_convex_hull,
-            "sphere": self.create_sphere,
-        }
-        remove_methods_dict = {
-            "aabb": self.remove_aabb,
-            "chull": self.remove_convex_hull,
-            "sphere": self.remove_sphere,
-        }
-        for box_name in self.boxes.keys():
-            if box_name:
-                self.scene.removeShape(self.name+"_"+box_name)
-                create_methods_dict[box_name]()
-            else:
-                continue
+
                 
         
     def move_to(self, new_position:np.ndarray|list):
@@ -138,6 +124,10 @@ class UAV:
                 if self.boxes_visibility[box_name]:
                     self.remove_convex_hull()
                     self.create_convex_hull()
+            
+            elif box_name == "aabb_node":
+                self.boxes["aabb_node"] = None
+
                     
     
     def move_by(self, dist:np.ndarray):
@@ -185,11 +175,276 @@ class UAV:
                     self.remove_convex_hull()
                     self.create_convex_hull()
 
-
-
+    def collides(self, other: "UAV", show:bool = False):
+        """Check if the UAV collides with another UAV
+        The collision check is done usng several methods following a hierarchical order"""
         
 
 
+        hierarchy = [
+            self.collides_aabb,
+            self.collides_aabb_node,
+            self.collides_kdop,            
+            self.collides_convex_hull,
+            self.collides_mesh_random,
+            # self.collides_mesh,
+        ]
+        for i, method in enumerate(hierarchy):
+            if method(other, show= (i==len(hierarchy)-1)):
+                continue
+            else:
+                return False
+            
+        return True
+
+    def collides_aabb(self, other: "UAV", show:bool = False):
+        if not self.boxes["aabb"]:
+            self.create_aabb()
+        if not other.boxes["aabb"]:
+            other.create_aabb()
+        dist = np.linalg.norm(self.position - other.position)
+        if dist>2:
+            return False
+        
+        xmin1 = self.boxes["aabb"].x_min
+        xmax1 = self.boxes["aabb"].x_max
+        ymin1 = self.boxes["aabb"].y_min
+        ymax1 = self.boxes["aabb"].y_max
+        zmin1 = self.boxes["aabb"].z_min
+        zmax1 = self.boxes["aabb"].z_max
+        
+        xmin2 = other.boxes["aabb"].x_min
+        xmax2 = other.boxes["aabb"].x_max
+        ymin2 = other.boxes["aabb"].y_min
+        ymax2 = other.boxes["aabb"].y_max
+        zmin2 = other.boxes["aabb"].z_min
+        zmax2 = other.boxes["aabb"].z_max
+
+        if xmax1 < xmin2 or xmin1 > xmax2:
+            return False
+        if ymax1 < ymin2 or ymin1 > ymax2:
+            return False
+        if zmax1 < zmin2 or zmin1 > zmax2:
+            return False
+
+        if show:
+            pair = f"{self.name}_{other.name}"
+            collision_cuboid1 = Cuboid3D(p1=[xmin1, ymin1, zmin1], p2=[xmax1, ymax1, zmax1], color=Color.BLUE, width = 5, filled=False)
+            collision_cuboid2 = Cuboid3D(p1=[xmin2, ymin2, zmin2], p2=[xmax2, ymax2, zmax2], color=Color.BLUE, width = 5, filled=False)
+
+            self.scene.addShape(collision_cuboid1, pair + "_collision_1")
+            self.scene.addShape(collision_cuboid2, pair + "_collision_2")
+        return True
+
+    def collides_kdop(self, other: "UAV", show:bool = False):
+        if not self.boxes["kdop"]:
+            self.create_kdop(kdop_number)
+        if not other.boxes["kdop"]:
+            other.create_kdop(kdop_number)
+        
+        dist = np.linalg.norm(self.position - other.position)
+        if dist>2:
+            return False
+        
+        kdop1_points = self.boxes["kdop"].vertices
+        kdop2_points = other.boxes["kdop"].vertices
+        if np.any(np.max(kdop1_points, axis=0) < np.min(kdop2_points, axis=0)) or np.any(np.min(kdop1_points, axis=0) > np.max(kdop2_points, axis=0)):
+            return False
+        
+        return self.boxes["kdop"].collides_lines(other.boxes["kdop"], show=show, scene=self.scene)
+
+    def collides_aabb_node(self, other: "UAV", show:bool = False):
+        if not self.boxes["aabb_node"]:
+            self.create_aabb_node()
+        if not other.boxes["aabb_node"]:
+            other.create_aabb_node()
+        pair = f"{self.name}+{other.name}:"
+        self.scene.removeShape(pair+"aabb_node_collision_1")
+        self.scene.removeShape(pair+"aabb_node_collision_2")
+        dist = np.linalg.norm(self.position - other.position)
+        if dist>2:
+            return False
+        
+        return self.boxes["aabb_node"].collides(other.boxes["aabb_node"], show=True, scene=self.scene)
+        
+
+       
+
+    def collides_mesh(self, other: "UAV", show:bool = False):
+        dist = np.linalg.norm(self.position - other.position)
+        if dist>2:
+            return False
+        mesh1 = self.mesh
+        mesh2 = other.mesh
+        max_cords1 = np.max(mesh1.vertices, axis=0)
+        min_cords1 = np.min(mesh1.vertices, axis=0)
+        max_cords2 = np.max(mesh2.vertices, axis=0)
+        min_cords2 = np.min(mesh2.vertices, axis=0)
+        triangles_3d1 = []
+        triangles_3d2 = []
+        for i in range(len(mesh1.triangles)):
+            triangle = mesh1.triangles[i]
+            vertices = mesh1.vertices[triangle]
+            if np.any(vertices > max_cords2) or np.any(vertices < min_cords2):
+                continue
+            triangles_3d1.append(Triangle3D(vertices[0], vertices[1], vertices[2]))
+        
+        for i in range(len(mesh2.triangles)):
+            triangle = mesh2.triangles[i]
+            vertices = mesh2.vertices[triangle]
+            if np.any(vertices > max_cords1) or np.any(vertices < min_cords1):
+                continue
+            triangles_3d2.append(Triangle3D(vertices[0], vertices[1], vertices[2]))
+
+        dist_cutoff = 0.1
+        for t1 in range(len(triangles_3d1)):
+            for t2 in range(len(triangles_3d2)):
+                
+                triangle1 = triangles_3d1[t1]
+                triangle2 = triangles_3d2[t2]
+                v1 = triangle1.getPoints()
+                v2 = triangle2.getPoints()
+                dist = np.linalg.norm(np.mean(v1, axis=0) - np.mean(v2, axis=0))
+                if dist > dist_cutoff:
+                    continue
+                if triangle1.collides_triangle(triangle2):
+                    if show:
+                        self.scene.addShape(Point3D(np.mean(v1, axis=0), color=Color.BLUE, size=5), "collision_point1")
+                    return True
+    
+        return False
+    
+    def collides_convex_hull(self, other: "UAV", show:bool = False):
+
+        if show:
+            pair = f"{self.name}_{other.name}"
+            self.scene.removeShape(pair + "_collision_point1")
+        if not self.boxes["chull"]:
+            self.create_convex_hull()
+            
+        if not other.boxes["chull"]:
+            other.create_convex_hull()
+        dist = np.linalg.norm(self.position - other.position)
+        if dist>2:
+            return False
+        
+        chull1 = self.boxes["chull"]
+        chull2 = other.boxes["chull"]
+
+        min1 = np.min(chull1.vertices, axis=0)
+        max1 = np.max(chull1.vertices, axis=0)
+        min2 = np.min(chull2.vertices, axis=0)
+        max2 = np.max(chull2.vertices, axis=0)
+
+        if np.any(max1 < min2) or np.any(min1 > max2):
+            return False
+        
+        triangles_3d1 = []
+        triangles_3d2 = []
+        counter = 0
+        for i in range(len(chull1._shape.triangles)):
+            triangle = chull1._shape.triangles[i]
+            vertices = chull1.vertices[triangle]
+            for i in range(3):
+                if np.all(vertices[:, i]<min2[i]) or np.all(vertices[:, i]>max2[i]):
+                    break
+            else:
+                triangles_3d1.append(Triangle3D(vertices[0], vertices[1], vertices[2]))
+        for i in range(len(chull2._shape.triangles)):
+            triangle = chull2._shape.triangles[i]
+            vertices = chull2.vertices[triangle]
+            for i in range(3):
+                if np.all(vertices[:, i]<min1[i]) or np.all(vertices[:, i]>max1[i]):
+                    break
+            else:
+                triangles_3d2.append(Triangle3D(vertices[0], vertices[1], vertices[2]))
+
+        for t1 in range(len(triangles_3d1)):
+            for t2 in range(len(triangles_3d2)):
+                
+                triangle1 = triangles_3d1[t1]
+                triangle2 = triangles_3d2[t2]
+                v1 = triangle1.getPoints()
+                v2 = triangle2.getPoints()
+                dist = np.linalg.norm(np.mean(v1, axis=0) - np.mean(v2, axis=0))
+                if triangle1.collides_triangle(triangle2):
+                    if show:
+                        self.scene.addShape(Point3D(np.mean(v1, axis=0), color=Color.BLUE, size=5), pair + "_collision_point1")
+                    return True
+
+                        
+    def collides_mesh_random(self, other: "UAV", show:bool = False):
+        dist = np.linalg.norm(self.position - self.position)
+        if dist>2:
+            return False
+        
+        number_of_partitions: int = 40
+        percentage=0.2
+        step = int(1/percentage)
+
+
+        mesh1 = self.mesh
+        mesh2 = other.mesh
+
+        space1 = np.ndarray((number_of_partitions+1, number_of_partitions+1, number_of_partitions+1), dtype=object)
+        space2 = np.ndarray((number_of_partitions+1, number_of_partitions+1, number_of_partitions+1), dtype=object)
+        for i in range(number_of_partitions+1):
+            for j in range(number_of_partitions+1):
+                for k in range(number_of_partitions+1):
+                    space1[i, j, k] = []
+                    space2[i, j, k] = []
+        
+        min1 = np.min(mesh1.vertices, axis=0)
+        max1 = np.max(mesh1.vertices, axis=0)
+        min2 = np.min(mesh2.vertices, axis=0)
+        max2 = np.max(mesh2.vertices, axis=0)
+
+        max_total = np.max([max1, max2], axis=0)
+        min_total = np.min([min1, min2], axis=0)
+
+        partition_size = (max_total - min_total) / number_of_partitions
+
+
+        for i in range(0, len(mesh1.triangles), step):
+            triangle = mesh1.triangles[i]
+            vertices = mesh1.vertices[triangle]
+            if np.any(vertices > max2) or np.any(vertices < min2):
+                continue
+            min_vertex = np.min(vertices, axis=0)
+            max_vertex = np.max(vertices, axis=0)
+            min_index = ((min_vertex - min_total) / partition_size).astype(int)
+            max_index = ((max_vertex - min_total) / partition_size).astype(int)
+            for x in range(min_index[0], max_index[0]+1):
+                for y in range(min_index[1], max_index[1]+1):
+                    for z in range(min_index[2], max_index[2]+1):
+                        space1[x, y, z].append(Triangle3D(vertices[0], vertices[1], vertices[2]))
+        
+        for i in range(0, len(mesh2.triangles), step):
+            triangle = mesh2.triangles[i]
+            vertices = mesh2.vertices[triangle]
+            if np.any(vertices > max1) or np.any(vertices < min1):
+                continue
+            min_vertex = np.min(vertices, axis=0)
+            max_vertex = np.max(vertices, axis=0)
+            min_index = ((min_vertex - min_total) / partition_size).astype(int)
+            max_index = ((max_vertex - min_total) / partition_size).astype(int)
+            for x in range(min_index[0], max_index[0]+1):
+                for y in range(min_index[1], max_index[1]+1):
+                    for z in range(min_index[2], max_index[2]+1):
+                        space2[x, y, z].append(Triangle3D(vertices[0], vertices[1], vertices[2]))
+
+        for i in range(number_of_partitions):
+            for j in range(number_of_partitions):
+                for k in range(number_of_partitions):
+                    for t1 in space1[i, j, k]:
+                        for t2 in space2[i, j, k]:
+                            triangle1 = t1
+                            triangle2 = t2
+                            
+                            if triangle1.collides_triangle(triangle2):
+                                return True
+        return False
+        
 
     def scale(self, scale:float = None, fit_to_unit_sphere:bool = False):
         """
@@ -239,6 +494,15 @@ class UAV:
         self.scene.removeShape(self.name+"_aabb")
         self.boxes_visibility["aabb"] = False
 
+    def create_aabb_node(self):
+        "Create an axis-aligned bounding box around the UAV"
+
+        if self.boxes["aabb_node"]:
+            return
+
+        aabb_node = AabbNode(self.mesh.vertices, max_depth = 4)
+        self.boxes["aabb_node"] = aabb_node
+
     def create_convex_hull(self):
         "Create a convex hull around the UAV"
 
@@ -264,7 +528,6 @@ class UAV:
         self.scene.addShape(hull_mesh, self.name+"_chull")
         self.boxes["chull"] = hull_mesh
         self.boxes_visibility["chull"] = True
-        print(f"Hull: {time.time()-start:.2f}s")
 
     def remove_convex_hull(self):
         self.scene.removeShape(self.name+"_chull")
@@ -329,8 +592,8 @@ class Airspace(Scene3D):
         self.N = N
         self.landing_pad = LandingPad(N, self)
         # self.create_uavs()
-        self.create_random_uavs()
-        # self.create_colliding_uavs()
+        # self.create_random_uavs()
+        self.create_colliding_uavs()
         # self.find_kdop_collisions()
 
     def create_uavs(self):
@@ -349,7 +612,7 @@ class Airspace(Scene3D):
         filename2 = f"models/{model2}.obj"
         uav1 = UAV(self, filename1, position=[1.5, 1, 0], scale=None)
         # uav2 = UAV(self, filename2, position=[0, 1, 0], scale=None)
-        uav3 = UAV(self, filename1, position=[1.5, 1, 1.5], scale=None)
+        uav3 = UAV(self, filename1, position=[1.5, 1, 1.0], scale=None)
 
     def create_random_uavs(self):
         for i in range(self.N):
@@ -362,6 +625,27 @@ class Airspace(Scene3D):
                 uav = UAV(self, filename, position=position, scale=None)
                 uav.rotate(rotation_angle, [0, 1, 0])
     
+    def find_collisions(self, show):
+
+        if show:
+            geometry_names = self._shapeDict.keys()
+            for geometry_name in geometry_names:
+                if "collision" in geometry_name:
+                    self.removeShape(geometry_name)
+
+        uav_names = list(self.uavs.keys())
+        start_time = time.time()
+        for i, uav1 in enumerate(uav_names):
+            for j in range(i+1, len(uav_names)):
+                uav2 = uav_names[j]
+                if self.uavs[uav1].collides(self.uavs[uav2], show=show):
+                    print(f"{uav1} collides with {uav2}")
+                else:
+                    print(f"{uav1} does not collide with {uav2}")
+        print(f"Collision check: {time.time()-start_time:.2f}s")
+
+
+
     def find_kdop_collisions(self):
         collisions = {}
         checked_pairs = {}
@@ -461,14 +745,14 @@ class Airspace(Scene3D):
                 for t1 in tqdm.tqdm(range(len(triangles_3d1)), desc="outer loop"):
                     for t2 in range(len(triangles_3d2)):
                         
-                        triangle1 = mesh1.triangles[t1]
-                        triangle2 = mesh2.triangles[t2]
-                        v1 = mesh1.vertices[triangle1]
-                        v2 = mesh2.vertices[triangle2]
+                        triangle1 = triangles_3d1[t1]
+                        triangle2 = triangles_3d2[t2]
+                        v1 = triangle1.getPoints()
+                        v2 = triangle2.getPoints()
                         dist = np.linalg.norm(np.mean(v1, axis=0) - np.mean(v2, axis=0))
                         if dist > dist_cutoff:
                             continue
-                        if Triangle3D(v1[0], v1[1], v1[2]).collides_triangle(Triangle3D(v2[0], v2[1], v2[2])):
+                        if triangles_3d1[t1].collides_triangle(triangles_3d2[t2]):
                             print(f"{uav1.name} collides with {uav2.name}")
                             collisions[(uav1.name, uav2.name)] = True
                             colision = True
@@ -790,7 +1074,34 @@ class Airspace(Scene3D):
 
         if symbol == Key.L:
             time1 = time.time()
-            self.find_kdop_collisions()
+            self.find_collisions(show=True)
+            # osprey = self.uavs.get("v22_osprey_0")
+            # other_uav = self.uavs.get("v22_osprey_1")
+            # methods = [
+            #     osprey.collides_aabb_node,
+            #     osprey.collides_kdop,
+            #     osprey.collides_convex_hull,
+            #     # osprey.collides_mesh,
+            #     osprey.collides_mesh_random,
+            # ]
+            # method_names = [
+            #     "AABB Node",
+            #     "Kdop",
+            #     "Convex Hull",
+            #     # "Mesh",
+            #     "Mesh Random",
+            # ]
+            # for i, method in enumerate(methods):
+            #     collision = False
+            #     time2 = time.time()
+            #     if method(other_uav):
+            #         collision = True
+            #     else:
+            #         collision = False
+            #     print(f"{method_names[i]}: {collision}, time: {time.time()-time2:.2f}s")
+
+
+            # self.find_kdop_collisions()
             # self.find_aabb_collisions()
             # self.find_chull_collisions()
             # self.find_mesh_collisions_slow()
@@ -861,7 +1172,6 @@ class Kdop(Polyhedron3D):
         if self.uav:
             if self.uav._class in Kdop.classes_to_kdop:
                 self.create_from_class()
-                print("created from class")
                 return
         if self.k == 6:
             self.create_6dop()
@@ -1113,11 +1423,7 @@ def main():
     
     airspace = Airspace(1920, 1080, N = 5)
 
-    # for i,model in enumerate(models):
-    #     uav = UAV(airspace, f"models/{model}.obj", position=[2*i, 1, 0], scale=None)
-    #     # uav.create_sphere(radius=None, resolution=30)
-    
-    # landing_pad = LandingPad(N, airspace)
+
 
 
         
