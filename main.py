@@ -5,6 +5,7 @@ import open3d.visualization.rendering as rendering # type: ignore
 from open3d.visualization.gui import MouseEvent, KeyEvent # type: ignore
 from open3d.visualization.rendering import Camera # type: ignore
 import numpy as np
+import time
 from vvrpywork.constants import Key, Mouse, Color
 from vvrpywork.scene import Scene2D, Scene3D, get_rotation_matrix, world_space
 from vvrpywork.shapes import (
@@ -34,6 +35,9 @@ models = ["v22_osprey",
     ]
 
 kdop_number = 14
+np.random.seed(123456)
+# np.random.seed(12345)
+# np.random.seed(1234)
 
 
 
@@ -323,9 +327,10 @@ class Airspace(Scene3D):
         super().__init__(width, height, window_name)
         self.uavs: list[UAV] = {}
         self.N = N
-        # self.landing_pad = LandingPad(N, self)
+        self.landing_pad = LandingPad(N, self)
         # self.create_uavs()
-        self.create_colliding_uavs()
+        self.create_random_uavs()
+        # self.create_colliding_uavs()
         # self.find_kdop_collisions()
 
     def create_uavs(self):
@@ -346,6 +351,16 @@ class Airspace(Scene3D):
         # uav2 = UAV(self, filename2, position=[0, 1, 0], scale=None)
         uav3 = UAV(self, filename1, position=[1.5, 1, 1.5], scale=None)
 
+    def create_random_uavs(self):
+        for i in range(self.N):
+            for j in range(self.N):
+                model = models[np.random.randint(0, len(models))]
+                filename = f"models/{model}.obj"
+                position = [np.random.uniform(-self.N, 3*self.N), 2, np.random.uniform(-self.N, 3*self.N)]
+                rotation_angle = np.random.uniform(0, 2*np.pi)
+
+                uav = UAV(self, filename, position=position, scale=None)
+                uav.rotate(rotation_angle, [0, 1, 0])
     
     def find_kdop_collisions(self):
         collisions = {}
@@ -359,6 +374,9 @@ class Airspace(Scene3D):
                 checked_pairs[(uav1.name, uav2.name)] = True
                 created1 = False
                 created2 = False
+                dist = np.linalg.norm(uav1.position - uav2.position)
+                if dist>2:
+                    continue
                 if not uav1.boxes["kdop"]:
                     created1 = True
                     uav1.create_kdop(kdop_number)
@@ -369,11 +387,11 @@ class Airspace(Scene3D):
                 time1 = time.time()
                 if uav1.boxes["kdop"].collides_lines(uav2.boxes["kdop"], show=True, scene=self):
                     print(f"{uav1.name} collides with {uav2.name}")
+                    print(f"Collision check: {time.time()-time1:.2f}s")
+
                     collisions[(uav1.name, uav2.name)] = True
                     
-                else:
-                    print(f"{uav1.name} does not collide with {uav2.name}")
-                print(f"Collision check: {time.time()-time1:.2f}s")
+
                 if created1:
                     uav1.remove_kdop()
                 if created2:
@@ -771,16 +789,20 @@ class Airspace(Scene3D):
                     uav.create_kdop(kdop_number)
 
         if symbol == Key.L:
+            time1 = time.time()
             self.find_kdop_collisions()
             # self.find_aabb_collisions()
             # self.find_chull_collisions()
             # self.find_mesh_collisions_slow()
             # self.find_mesh_collisions_opt()
             # self.find_mesh_collisions_random()
+            print(f"End of collision check: {time.time()-time1:.2f}s")
             
             
 
-        osprey:UAV = self.uavs["v22_osprey_0"]
+        osprey:UAV = self.uavs.get("v22_osprey_0")
+        if not osprey:
+            return
         if symbol in [Key.UP, Key.DOWN, Key.LEFT, Key.RIGHT, Key.SPACE, Key.BACKSPACE, Key.R]:
             # osprey.remove_kdop()
             if symbol == Key.UP:
@@ -1089,7 +1111,7 @@ def main():
 
 
     
-    airspace = Airspace(1920, 1080, N = 1)
+    airspace = Airspace(1920, 1080, N = 5)
 
     # for i,model in enumerate(models):
     #     uav = UAV(airspace, f"models/{model}.obj", position=[2*i, 1, 0], scale=None)
