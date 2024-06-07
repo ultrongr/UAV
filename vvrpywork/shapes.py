@@ -3384,6 +3384,7 @@ class AabbNode:
         if len(self.children) == 0 and len(other.children) == 0:
 
             if show and scene:
+                print("showing collision aab_node")
                 cuboid1 = Cuboid3D([self.minx, self.miny, self.minz], [self.maxx, self.maxy, self.maxz], color=(0, 0, 1, 0.5), width=4)
                 cuboid2 = Cuboid3D([other.minx, other.miny, other.minz], [other.maxx, other.maxy, other.maxz], color=(0, 0, 1, 0.5), width=4)
                 pair = f"{self.uav_name}+{other.uav_name}:"

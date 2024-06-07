@@ -185,12 +185,13 @@ class UAV:
             self.collides_aabb,
             self.collides_aabb_node,
             self.collides_kdop,            
-            self.collides_convex_hull,
-            self.collides_mesh_random,
+            # self.collides_convex_hull,
+            # self.collides_mesh_random,
             # self.collides_mesh,
         ]
         for i, method in enumerate(hierarchy):
-            if method(other, show= (i==len(hierarchy)-1)):
+            is_last = (i==len(hierarchy)-1) 
+            if method(other, show= (show and is_last)):
                 continue
             else:
                 return False
@@ -200,8 +201,10 @@ class UAV:
     def collides_aabb(self, other: "UAV", show:bool = False):
         if not self.boxes["aabb"]:
             self.create_aabb()
+            self.remove_aabb() # Hiding it since it wasnt visible before
         if not other.boxes["aabb"]:
             other.create_aabb()
+            other.remove_aabb() # Hiding it since it wasnt visible before
         dist = np.linalg.norm(self.position - other.position)
         if dist>2:
             return False
@@ -219,6 +222,8 @@ class UAV:
         ymax2 = other.boxes["aabb"].y_max
         zmin2 = other.boxes["aabb"].z_min
         zmax2 = other.boxes["aabb"].z_max
+
+
 
         if xmax1 < xmin2 or xmin1 > xmax2:
             return False
@@ -239,8 +244,10 @@ class UAV:
     def collides_kdop(self, other: "UAV", show:bool = False):
         if not self.boxes["kdop"]:
             self.create_kdop(kdop_number)
+            self.remove_kdop() # Hiding it since it wasnt visible before
         if not other.boxes["kdop"]:
             other.create_kdop(kdop_number)
+            other.remove_kdop() # Hiding it since it wasnt visible before
         
         dist = np.linalg.norm(self.position - other.position)
         if dist>2:
@@ -265,7 +272,7 @@ class UAV:
         if dist>2:
             return False
         
-        return self.boxes["aabb_node"].collides(other.boxes["aabb_node"], show=True, scene=self.scene)
+        return self.boxes["aabb_node"].collides(other.boxes["aabb_node"], show=show, scene=self.scene)
         
 
        
@@ -316,14 +323,14 @@ class UAV:
     
     def collides_convex_hull(self, other: "UAV", show:bool = False):
 
-        if show:
-            pair = f"{self.name}_{other.name}"
-            self.scene.removeShape(pair + "_collision_point1")
+
+
         if not self.boxes["chull"]:
             self.create_convex_hull()
-            
+            self.remove_convex_hull() # Hiding it since it wasnt visible before
         if not other.boxes["chull"]:
             other.create_convex_hull()
+            other.remove_convex_hull() # Hiding it since it wasnt visible before
         dist = np.linalg.norm(self.position - other.position)
         if dist>2:
             return False
@@ -341,7 +348,7 @@ class UAV:
         
         triangles_3d1 = []
         triangles_3d2 = []
-        counter = 0
+
         for i in range(len(chull1._shape.triangles)):
             triangle = chull1._shape.triangles[i]
             vertices = chull1.vertices[triangle]
@@ -369,7 +376,20 @@ class UAV:
                 dist = np.linalg.norm(np.mean(v1, axis=0) - np.mean(v2, axis=0))
                 if triangle1.collides_triangle(triangle2):
                     if show:
-                        self.scene.addShape(Point3D(np.mean(v1, axis=0), color=Color.BLUE, size=5), pair + "_collision_point1")
+                        pair = f"{self.name}_{other.name}"
+
+                        collision_triangle1 = Triangle3D(v1[0], v1[1], v1[2], color=Color.BLUE)
+                        collision_triangle2 = Triangle3D(v2[0], v2[1], v2[2], color=Color.BLUE)
+                        self.scene.addShape(collision_triangle1, pair + "_collision_triangle1_"+str(t1))
+                        self.scene.addShape(collision_triangle2, pair + "_collision_triangle2_"+str(t2))
+                        
+                        # for j,v in enumerate((v1, v2)):
+                        #     self.scene.addShape(Point3D(np.mean(v, axis=0), color=Color.BLUE, size=5), pair + "_collision_point1_"+str(j))
+                        #     for i in range(3):
+                        #         start = np.mean(v, axis=0)
+                        #         end = start+0.5*np.array([(i==0), (i==1), (i==2)])
+                        #         arrow = Arrow3D(start, end, color=Color.BLUE, width=1)
+                        #         self.scene.addShape(arrow, pair + f"_collision_arrow1_{j}{i}")
                     return True
 
                         
@@ -593,8 +613,7 @@ class Airspace(Scene3D):
         self.landing_pad = LandingPad(N, self)
         # self.create_uavs()
         # self.create_random_uavs()
-        self.create_colliding_uavs()
-        # self.find_kdop_collisions()
+        # self.create_colliding_uavs()
 
     def create_uavs(self):
         for i in range(self.N):
@@ -1422,6 +1441,8 @@ def main():
 
     
     airspace = Airspace(1920, 1080, N = 5)
+
+    airspace.create_random_uavs()
 
 
 
