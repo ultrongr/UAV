@@ -629,7 +629,7 @@ class Airspace(Scene3D):
         filename1 = f"models/{model1}.obj"
         filename2 = f"models/{model2}.obj"
         uav1 = UAV(self, filename1, position=[1.5, 1, 0], scale=None)
-        # uav2 = UAV(self, filename2, position=[0, 1, 0], scale=None)
+        uav2 = UAV(self, filename2, position=[0, 1, 0], scale=None)
         uav3 = UAV(self, filename1, position=[1.5, 1, 1.0], scale=None)
 
     def create_random_uavs(self):
