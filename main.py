@@ -33,7 +33,7 @@ models = ["v22_osprey",
         # "B2_Spirit", ## small kdop issue
         
     ]
-
+show_times = False
 kdop_number = 14
 np.random.seed(123456)
 # np.random.seed(12345)
@@ -100,7 +100,6 @@ class UAV:
         self.mesh._update(self.name, self.scene)
 
         for box_name in self.boxes.keys():
-            # print(box_name)
             if not self.boxes.get(box_name):
                 continue
             
@@ -658,11 +657,12 @@ class Airspace(Scene3D):
             for j in range(i+1, len(uav_names)):
                 uav2 = uav_names[j]
                 if self.uavs[uav1].collides(self.uavs[uav2], show=show):
-                    print(f"{uav1} collides with {uav2}")
+                    print(f"!!!{uav1} collides with {uav2}!!!")
                 else:
                     # print(f"{uav1} does not collide with {uav2}")
                     continue
-        print(f"Collision check: {time.time()-start_time:.2f}s")
+        if show_times:
+            print(f"Collision check: {time.time()-start_time:.2f}s")
  
 
     def on_key_press(self, symbol, modifiers):
@@ -698,39 +698,10 @@ class Airspace(Scene3D):
         if symbol == Key.L:
             time1 = time.time()
             self.find_collisions(show=True)
-            # osprey = self.uavs.get("v22_osprey_0")
-            # other_uav = self.uavs.get("v22_osprey_1")
-            # methods = [
-            #     osprey.collides_aabb_node,
-            #     osprey.collides_kdop,
-            #     osprey.collides_convex_hull,
-            #     # osprey.collides_mesh,
-            #     osprey.collides_mesh_random,
-            # ]
-            # method_names = [
-            #     "AABB Node",
-            #     "Kdop",
-            #     "Convex Hull",
-            #     # "Mesh",
-            #     "Mesh Random",
-            # ]
-            # for i, method in enumerate(methods):
-            #     collision = False
-            #     time2 = time.time()
-            #     if method(other_uav):
-            #         collision = True
-            #     else:
-            #         collision = False
-            #     print(f"{method_names[i]}: {collision}, time: {time.time()-time2:.2f}s")
-
-
-            # self.find_kdop_collisions()
-            # self.find_aabb_collisions()
-            # self.find_chull_collisions()
-            # self.find_mesh_collisions_slow()
-            # self.find_mesh_collisions_opt()
-            # self.find_mesh_collisions_random()
-            print(f"End of collision check: {time.time()-time1:.2f}s")
+            if show_times:
+                print(f"End of collision check for the airspace: {time.time()-time1:.2f}s")
+            else:
+                print("End of collision check for the airspace")
             
             
 
@@ -897,7 +868,7 @@ class Kdop(Polyhedron3D):
                     min_vertex = vertex
             directions_to_vertices[tuple(direction)] = max_vertex
             directions_to_vertices[tuple(np.array(direction)*-1)] = min_vertex
-        print(f"Finding directions took {time.time()-start:.2f}s")
+        # print(f"Finding directions took {time.time()-start:.2f}s")
 
         triangles = [] # Finding the triangles that are formed by the intersection of the corner planes with the faces
         for dir in directions_to_vertices.keys():
@@ -988,7 +959,8 @@ class Kdop(Polyhedron3D):
             dop_face_points=np.array(dop_face_points)
             face_polygon = ConvexPolygon3D(dop_face_points, normal=direction,color=Color.RED) # The face of the kdop corresponding to the direction
             dop_polygons.append(face_polygon)
-        print(f"Creating kdop named {self.name} took {time.time()-start:.2f}s")
+        if show_times:
+            print(f"Creating kdop named {self.name} took {time.time()-start:.2f}s")
         super().__init__(dop_polygons, color=Color.RED, name = self.name) 
         if self.scene:
             self.scene.addShape(self, self.name)
@@ -997,7 +969,7 @@ class Kdop(Polyhedron3D):
         
         
 
-        print(f"14DOP: {time.time()-start:.2f}s")
+        # print(f"14DOP: {time.time()-start:.2f}s")
     
     def create_from_class(self):
         import time
@@ -1021,7 +993,8 @@ class Kdop(Polyhedron3D):
         self.rotate(R, new_uav_position)
         if self.scene:
             self.scene.addShape(self, self.name)
-        print(f"Cached kdop creation time: {time.time()-time1:.2f}s")
+        if show_times:
+            print(f"Cached kdop creation time: {time.time()-time1:.2f}s")
 
         
 
