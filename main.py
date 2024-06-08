@@ -847,28 +847,25 @@ class Kdop(Polyhedron3D):
             [-1, -1, -1],
 
         ]
+        directions = np.array(directions)
 
         start = time.time()
 
         points = []
+        dot_products = np.dot(self.pc_vertices, directions.T) # Dot product of the vertices with the directions
         
-        directions_to_vertices = {} # Mapping the each direction to the furthest vertex in that direction
-        for direction in directions[:7]: # The other half will be the min vertices
-            max_val = -np.inf
-            max_vertex = None
-            min_val = np.inf
-            min_vertex = None
-            for vertex in self.pc_vertices:
-                val = np.dot(vertex, direction)
-                if val > max_val:
-                    max_val = val
-                    max_vertex = vertex
-                if val < min_val:
-                    min_val = val
-                    min_vertex = vertex
-            directions_to_vertices[tuple(direction)] = max_vertex
-            directions_to_vertices[tuple(np.array(direction)*-1)] = min_vertex
-        # print(f"Finding directions took {time.time()-start:.2f}s")
+        max_indices = np.argmax(dot_products, axis=0)
+        min_indices = np.argmin(dot_products, axis=0)
+
+        # Retrieve the vertices corresponding to the maximum and minimum dot products
+        max_vertices = self.pc_vertices[max_indices]
+        min_vertices = self.pc_vertices[min_indices]
+
+        # Map directions to corresponding, furthest away, vertices
+        directions_to_vertices = {}
+        for i, direction in enumerate(directions[:7]):
+            directions_to_vertices[tuple(direction)] = max_vertices[i]
+            directions_to_vertices[tuple(-direction)] = min_vertices[i]
 
         triangles = [] # Finding the triangles that are formed by the intersection of the corner planes with the faces
         for dir in directions_to_vertices.keys():
