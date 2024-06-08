@@ -6,22 +6,22 @@ This project simulates UAVs in a 3D environment and provides tools for creating 
 
 ### Prerequisites
 
-- Python 3.10
+- Python 3.10.13
 - Conda (optional, but recommended for managing virtual environments)
 
 ### Setup
 
 1. **Clone the Repository or Download the Project**
 
-   - **Clone the repository** clone it to your local machine:
+   - **Clone the repository (soon)** clone it to your local machine (Temporarily private):
      ```bash
      git clone https://github.com/ultrongr/UAV
      cd UAV
      ```
    - **Download the project** as a ZIP file and extract it:
      ```bash
-     unzip UAV.zip -d your-project
-     cd your-project
+     unzip UAV.zip -d UAV
+     cd UAV
      ```
 
 2. **Create a Virtual Environment (Recommended Conda)**
@@ -80,3 +80,6 @@ This project simulates UAVs in a 3D environment and provides tools for creating 
 
 
 
+## Communication
+
+- If you **need help**, you can contact me at [up1083865@ac.upatras.gr]
