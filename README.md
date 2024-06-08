@@ -52,6 +52,9 @@ This project simulates UAVs in a 3D environment and provides tools for creating 
     The project should open a window.
     After loading the UAVs it should display the 3D environment with the UAVs.
 
+    By default, the times for collision detection and kdop generation are printed to the console. 
+    This above  behaviour can be changed via setting `show_times = False`.
+
 2. **Interact with the Environment**
 
     - **Create and show the Axis Aligned Bounding Box (AABB) for the UAVs**
@@ -72,6 +75,7 @@ This project simulates UAVs in a 3D environment and provides tools for creating 
 
     - **Move a specific UAV**
         - Use the arrow keys, space (up) and backspace (down) to move the UAV named v22_osprey_0 in the environment.
+        - You can also rotate the UAV using the `R` Key.
 
 
 
