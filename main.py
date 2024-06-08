@@ -660,7 +660,8 @@ class Airspace(Scene3D):
                 if self.uavs[uav1].collides(self.uavs[uav2], show=show):
                     print(f"{uav1} collides with {uav2}")
                 else:
-                    print(f"{uav1} does not collide with {uav2}")
+                    # print(f"{uav1} does not collide with {uav2}")
+                    continue
         print(f"Collision check: {time.time()-start_time:.2f}s")
  
 
@@ -690,10 +691,8 @@ class Airspace(Scene3D):
         if symbol == Key.K:
             for uav in self.uavs.values():
                 if uav.boxes_visibility["kdop"]:
-                    # print("removing kdop")
                     uav.remove_kdop()
                 else:
-                    # print("creating kdop")
                     uav.create_kdop(kdop_number)
 
         if symbol == Key.L:
@@ -898,7 +897,7 @@ class Kdop(Polyhedron3D):
                     min_vertex = vertex
             directions_to_vertices[tuple(direction)] = max_vertex
             directions_to_vertices[tuple(np.array(direction)*-1)] = min_vertex
-        
+        print(f"Finding directions took {time.time()-start:.2f}s")
 
         triangles = [] # Finding the triangles that are formed by the intersection of the corner planes with the faces
         for dir in directions_to_vertices.keys():
@@ -1003,7 +1002,6 @@ class Kdop(Polyhedron3D):
     def create_from_class(self):
         import time
 
-        print(f"Creating Kdop from class {self.uav._class}")
         time1 = time.time()
         other_uav_position, other_uav_direction, other_kdop = Kdop.classes_to_kdop[self.uav._class]
         other_polygons = other_kdop._polygons
