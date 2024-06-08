@@ -33,7 +33,7 @@ models = ["v22_osprey",
         # "B2_Spirit", ## small kdop issue
         
     ]
-show_times = False
+show_times = True
 kdop_number = 14
 np.random.seed(123456)
 # np.random.seed(12345)
@@ -647,9 +647,12 @@ class Airspace(Scene3D):
 
         if show:
             geometry_names = self._shapeDict.keys()
+            collision_geometries = []
             for geometry_name in geometry_names:
                 if "collision" in geometry_name:
-                    self.removeShape(geometry_name)
+                    collision_geometries.append(geometry_name)
+            for geometry_name in collision_geometries:
+                self.removeShape(geometry_name)
 
         uav_names = list(self.uavs.keys())
         start_time = time.time()
@@ -661,8 +664,7 @@ class Airspace(Scene3D):
                 else:
                     # print(f"{uav1} does not collide with {uav2}")
                     continue
-        if show_times:
-            print(f"Collision check: {time.time()-start_time:.2f}s")
+
  
 
     def on_key_press(self, symbol, modifiers):
@@ -696,6 +698,7 @@ class Airspace(Scene3D):
                     uav.create_kdop(kdop_number)
 
         if symbol == Key.L:
+            print("Start of collision check for the airspace")
             time1 = time.time()
             self.find_collisions(show=True)
             if show_times:
@@ -991,7 +994,7 @@ class Kdop(Polyhedron3D):
         if self.scene:
             self.scene.addShape(self, self.name)
         if show_times:
-            print(f"Cached kdop creation time: {time.time()-time1:.2f}s")
+            print(f"Cached kdop creation time: {time.time()-time1:.2f}s ({self.name})")
 
         
 
