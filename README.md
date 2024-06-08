@@ -13,7 +13,7 @@ This project simulates UAVs in a 3D environment and provides tools for creating 
 
 1. **Clone the Repository or Download the Project**
 
-   - **Clone the repository (soon)** clone it to your local machine (Temporarily private):
+   - **Clone the repository (temporarily private)** to your local machine:
      ```bash
      git clone https://github.com/ultrongr/UAV
      cd UAV
@@ -82,4 +82,4 @@ This project simulates UAVs in a 3D environment and provides tools for creating 
 
 ## Communication
 
-- If you **need help**, you can contact me at [up1083865@ac.upatras.gr]
+- If you **need help**, you can contact me at up1083865@ac.upatras.gr
