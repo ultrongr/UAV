@@ -23,11 +23,11 @@ unlitLine = rendering.MaterialRecord()
 unlitLine.shader = "unlitLine"
 unlitLine.line_width = 5
 
-models = ["v22_osprey",
-        "twin_copter",
-        "F52",
+models = [#"v22_osprey",
+        # "twin_copter",
+        # "F52",
         "Helicopter",
-        "quadcopter_scifi",
+        # "quadcopter_scifi",
         
         # "fight_drone", ## small kdop issue
         # "B2_Spirit", ## small kdop issue
@@ -59,6 +59,7 @@ class UAV:
         UAV.classes[self._class] += 1
 
 
+
         self.scene.addUAV(self)
 
         self.boxes = {
@@ -78,7 +79,9 @@ class UAV:
 
         self.position = np.mean(self.mesh.vertices, axis=0)
         self.direction = np.array([0, 0, -1])
-        
+        if "Helicopter" in filename: # Correcting incorrect rotation of mesh to aline with direction
+            self.direction = np.array([1, 0, 0])
+        self.speed = np.array([0.1, 0.1, 0.1])
         if position:            
             self.move_to(position)
         
@@ -174,6 +177,24 @@ class UAV:
                     self.remove_convex_hull()
                     self.create_convex_hull()
 
+    # def is_stopped(self):
+        
+
+    def collides_dt(self, other: "UAV", dt:float, show:bool = False):
+        """Check if the UAV collides with another UAV after moving by the specified distance"""
+        new_pos = self.position + dt*self.speed*self.direction
+        other_new_pos = other.position + dt*other.speed*other.direction
+        
+        if np.linalg.norm(new_pos - other_new_pos)>2:
+            return False
+        old_position = self.position
+        self.move_by(dt*self.speed*self.direction)
+        other.move_by(dt*other.speed*other.direction)
+        collides = self.collides(other, show)
+        other.move_by(-dt*other.speed*other.direction)
+        self.move_to(old_position)
+        return collides
+
     def collides(self, other: "UAV", show:bool = False):
         """Check if the UAV collides with another UAV
         The collision check is done usng several methods following a hierarchical order"""
@@ -182,7 +203,7 @@ class UAV:
 
         hierarchy = [
             self.collides_aabb,
-            self.collides_aabb_node,
+            # self.collides_aabb_node,
             self.collides_kdop,            
             # self.collides_convex_hull,
             # self.collides_mesh_random,
@@ -605,11 +626,14 @@ class LandingPad:
 
 class Airspace(Scene3D):
 
-    def __init__(self, width, height, N, window_name="UAV"):
+    def __init__(self, width, height, N, dt, window_name="UAV"):
         super().__init__(width, height, window_name)
         self.uavs: list[UAV] = {}
         self.N = N
         self.landing_pad = LandingPad(N, self)
+        self.dt = dt
+        self.last_update = time.time()
+        self.paused = True
         # self.create_uavs()
         # self.create_random_uavs()
         # self.create_colliding_uavs()
@@ -642,7 +666,30 @@ class Airspace(Scene3D):
 
                 uav = UAV(self, filename, position=position, scale=None)
                 uav.rotate(rotation_angle, [0, 1, 0])
-    
+
+    def create_random_uavs_non_colliding(self):
+        def check_collision(p, positions):
+            for pos in positions:
+                if np.linalg.norm(np.array(p) - np.array(pos)) < 2:
+                    return True
+            return False
+        positions = []
+        for i in range(self.N):
+            for j in range(self.N):
+                
+                position = [np.random.uniform(-self.N, 3*self.N), 2, np.random.uniform(-self.N, 3*self.N)]
+                while check_collision(position, positions):
+                    position = [np.random.uniform(-self.N, 3*self.N), 2, np.random.uniform(-self.N, 3*self.N)]
+                positions.append(position)
+                model = models[np.random.randint(0, len(models))]
+                filename = f"models/{model}.obj"
+                
+                rotation_angle = np.random.uniform(0, 2*np.pi)
+
+                uav = UAV(self, filename, position=position, scale=None)
+                uav.rotate(rotation_angle, [0, 1, 0])
+        self.find_collisions(show=False)
+
     def find_collisions(self, show):
 
         if show:
@@ -665,6 +712,22 @@ class Airspace(Scene3D):
                     # print(f"{uav1} does not collide with {uav2}")
                     continue
 
+    def find_collisions_dt(self, dt:float, show:bool = False):
+        uav_names = list(self.uavs.keys())
+        start_time = time.time()
+        for i, uav1 in enumerate(uav_names):
+            for j in range(0, len(uav_names)):
+                if i==j:
+                    continue
+                uav2 = uav_names[j]
+                if self.uavs[uav1].collides_dt(self.uavs[uav2], dt, show=show):
+                    # print(f"!!!{uav1} collides with {uav2}!!!")
+                    self.uavs[uav1].speed= np.array([0, 0, 0])  
+                    pass
+                else:
+                    # print(f"{uav1} does not collide with {uav2}")
+                    continue
+                    
  
 
     def on_key_press(self, symbol, modifiers):
@@ -705,7 +768,13 @@ class Airspace(Scene3D):
                 print(f"End of collision check for the airspace: {time.time()-time1:.2f}s")
             else:
                 print("End of collision check for the airspace")
-            
+        
+        if symbol == Key.P:
+            self.paused = not self.paused
+            if self.paused:
+                print("Paused")
+            else:
+                print("Unpaused")
             
 
         osprey:UAV = self.uavs.get("v22_osprey_0")
@@ -741,6 +810,39 @@ class Airspace(Scene3D):
             self.addUAV(uav)
         else:
             self.updateShape(uav.mesh, uav.name)
+
+    def on_idle(self):
+        if self.paused:
+            return
+        if time.time() - self.last_update < self.dt:
+            return
+        print("new frame")
+        self.last_update = time.time()
+        self.protocol_random()
+        
+        pass
+
+    def protocol_random(self):
+        stopped_uavs = []
+        for uav in self.uavs.values():
+            if np.all(uav.speed == 0):
+                stopped_uavs.append(uav)
+                continue
+        np.random.shuffle(stopped_uavs)
+        for uav in stopped_uavs[:len(stopped_uavs)//2]:
+            uav.speed = np.array([np.random.uniform(-0.1, 0.1) for _ in range(3)])
+        self.find_collisions_dt(self.dt, show=False)
+        time1 = time.time()
+        for uav in self.uavs.values():
+            direction = uav.direction
+            speed = uav.speed
+            dx, dy, dz = self.dt*speed*direction
+            
+            uav.move_by([dx, dy, dz])
+        non_zero_speeds = [uav.speed for uav in self.uavs.values() if np.any(uav.speed != 0)]
+        print(f"Time taken to update the UAVs: {time.time()-time1:.2f}s, {len(non_zero_speeds)} UAVs with non-zero speed")   
+        # speeds = [uav.speed for uav in self.uavs.values()]
+        # print(f"Speeds: {speeds}")
 
 class Kdop(Polyhedron3D):
 
@@ -1016,9 +1118,10 @@ def main():
 
 
     
-    airspace = Airspace(1920, 1080, N = 5)
+    airspace = Airspace(1920, 1080, N = 5, dt=0.7)
 
-    airspace.create_random_uavs()
+    # airspace.create_random_uavs()
+    airspace.create_random_uavs_non_colliding()
 
 
 
