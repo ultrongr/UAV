@@ -2626,6 +2626,55 @@ class Mesh3D(ShapeSet):
         scene.removeShape(name)
         self._addToScene(scene, name)
 
+    def collides(self, other: Mesh3D):
+        '''Returns whether this mesh collides with another mesh.
+
+        Args:
+            other: The other mesh to check for collision with.
+
+        Returns:
+            Whether the two meshes collide.
+        '''
+        
+        min1 = np.min(self.vertices, axis=0)
+        max1 = np.max(self.vertices, axis=0)
+        min2 = np.min(other.vertices, axis=0)
+        max2 = np.max(other.vertices, axis=0)
+
+        if np.any(min1 > max2) or np.any(max1 < min2):
+            return False    
+        
+        triangles3d1 = []
+        triangles3d2 = []
+
+        for i in range(len(self.triangles)):
+            triangle = self._shape.triangles[i]
+            vertices = other.vertices[triangle]
+            for i in range(3):
+                if np.all(vertices[:, i]<min1[i]) or np.all(vertices[:, i]>max1[i]):
+                    break
+            else:
+                triangles3d1.append(Triangle3D(vertices[0], vertices[1], vertices[2]))
+        
+        for i in range(len(other.triangles)):
+            triangle = other._shape.triangles[i]
+            vertices = self.vertices[triangle]
+            for i in range(3):
+                if np.all(vertices[:, i]<min2[i]) or np.all(vertices[:, i]>max2[i]):
+                    break
+            else:
+                triangles3d2.append(Triangle3D(vertices[0], vertices[1], vertices[2]))
+        
+        triangles_3d1 = np.array(triangles3d1)
+        triangles_3d2 = np.array(triangles3d2)
+
+        for t1 in triangles_3d1:
+            for t2 in triangles_3d2:
+                if t1.collides_triangle(t2):
+                    return True
+            
+            
+
     @property
     def vertices(self) -> NDArray:
         '''The vertices of the mesh.'''

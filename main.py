@@ -180,7 +180,7 @@ class UAV:
     # def is_stopped(self):
         
 
-    def collides_dt(self, other: "UAV", dt:float, show:bool = False):
+    def collides_dt_simple(self, other: "UAV", dt:float, show:bool = False):
         """Check if the UAV collides with another UAV after moving by the specified distance"""
         new_pos = self.position + dt*self.speed*self.direction
         other_new_pos = other.position + dt*other.speed*other.direction
@@ -194,6 +194,55 @@ class UAV:
         other.move_by(-dt*other.speed*other.direction)
         self.move_to(old_position)
         return collides
+
+    def collides_dt(self, other: "UAV", dt:float, show:bool = False):
+
+        def get_continuous_kdop(uav: "UAV", dt:float):
+            
+            if not uav.boxes["kdop"]:
+                uav.create_kdop(kdop_number)
+                uav.remove_kdop() # Hiding it since it wasnt visible before
+            
+            kdop = uav.boxes["kdop"]
+            
+            triangles = kdop._shape.triangles
+            vertices = kdop._shape.vertices
+            initial_mesh = o3d.geometry.TriangleMesh()
+            initial_mesh.vertices = o3d.utility.Vector3dVector(vertices)
+            initial_mesh.triangles = o3d.utility.Vector3iVector(triangles)
+
+            vertices_new = vertices + dt*uav.speed
+            triangles_new = np.array(triangles)
+            new_mesh = o3d.geometry.TriangleMesh()
+            new_mesh.vertices = o3d.utility.Vector3dVector(vertices_new)
+            new_mesh.triangles = o3d.utility.Vector3iVector(triangles_new)
+
+            mesh_combined = initial_mesh + new_mesh
+            hull, _ = mesh_combined.compute_convex_hull()
+            hull_mesh = Mesh3D(color=Color.BLUE)
+            hull_mesh._shape.vertices=o3d.utility.Vector3dVector(hull.vertices)
+            hull_mesh._shape.triangles=o3d.utility.Vector3iVector(hull.triangles)
+            return hull_mesh
+        
+        if show:
+            self.scene.removeShape(self.name+other.name+"_continuous")
+            self.scene.removeShape(other.name+self.name+"_continuous")
+
+        continuous1 = get_continuous_kdop(self, dt)
+        continuous2 = get_continuous_kdop(other, dt)
+
+        
+        # print("created continuous kdops")
+
+
+        if continuous1.collides(continuous2):
+            if show:
+
+                self.scene.addShape(continuous1, self.name+other.name+"_continuous")
+                self.scene.addShape(continuous2, other.name+self.name+"_continuous")
+            return True
+        
+
 
     def collides(self, other: "UAV", show:bool = False):
         """Check if the UAV collides with another UAV
@@ -628,7 +677,7 @@ class Airspace(Scene3D):
 
     def __init__(self, width, height, N, dt, window_name="UAV"):
         super().__init__(width, height, window_name)
-        self.uavs: list[UAV] = {}
+        self.uavs: dict[UAV] = {}
         self.N = N
         self.landing_pad = LandingPad(N, self)
         self.dt = dt
@@ -690,6 +739,23 @@ class Airspace(Scene3D):
                 uav.rotate(rotation_angle, [0, 1, 0])
         self.find_collisions(show=False)
 
+    def create_time_colliding_uavs(self):
+        model1 = np.random.choice(models)
+        model2 = np.random.choice(models)
+        filename1 = f"models/{model1}.obj"
+        filename2 = f"models/{model2}.obj"
+        uav1 = UAV(self, filename1, position=[2, 1, 2], scale=None)
+        uav2 = UAV(self, filename2, position=[0, 1, 0], scale=None)
+
+        uav1.rotate(-np.pi/2, [0, 1, 0])
+
+        # speed = 1.1 # Not colliding
+        speed = 1.5 # Colliding
+        uav1.speed = np.array(speed*uav1.direction)
+        uav2.speed = np.array(speed*uav2.direction)
+
+        self.find_collisions_dt(self.dt, show=True)
+
     def find_collisions(self, show):
 
         if show:
@@ -712,23 +778,39 @@ class Airspace(Scene3D):
                     # print(f"{uav1} does not collide with {uav2}")
                     continue
 
-    def find_collisions_dt(self, dt:float, show:bool = False):
+    def find_collisions_dt_simple(self, dt:float, show:bool = False):
         uav_names = list(self.uavs.keys())
         start_time = time.time()
+        colliding = {}
+
         for i, uav1 in enumerate(uav_names):
-            for j in range(0, len(uav_names)):
-                if i==j:
+            colliding[i] = set()
+            for j, uav2 in enumerate(uav_names):
+                if uav1 == uav2:
                     continue
-                uav2 = uav_names[j]
+                
                 if self.uavs[uav1].collides_dt(self.uavs[uav2], dt, show=show):
                     # print(f"!!!{uav1} collides with {uav2}!!!")
-                    self.uavs[uav1].speed= np.array([0, 0, 0])  
-                    pass
-                else:
-                    # print(f"{uav1} does not collide with {uav2}")
-                    continue
+                    colliding[i].add(j)
                     
- 
+                    
+                else:
+                    continue
+        return colliding
+    
+    def find_collisions_dt(self, dt:float, show:bool = False):
+        colliding = {}
+
+        for i, uav1 in enumerate(self.uavs.values()):
+            colliding[i] = set()
+            for j, uav2 in enumerate(self.uavs.values()):
+                if uav1.collides_dt(uav2, dt, show=show):
+                    # print(f"!!!{uav1.name} collides with {uav2.name}!!!")
+                    colliding[i].add(j)
+                    
+                else:
+                    continue
+        
 
     def on_key_press(self, symbol, modifiers):
 
@@ -775,7 +857,14 @@ class Airspace(Scene3D):
                 print("Paused")
             else:
                 print("Unpaused")
-            
+        
+        if symbol == Key.T:
+            to_be_removed = []
+            for name in self._shapeDict.keys():
+                if "continuous" in name:
+                    to_be_removed.append(name)
+            for name in to_be_removed:
+                self.removeShape(name)
 
         osprey:UAV = self.uavs.get("v22_osprey_0")
         if not osprey:
@@ -796,6 +885,8 @@ class Airspace(Scene3D):
                 osprey.move_by([0, -0.1, 0])
             if symbol == Key.R:
                 osprey.rotate(np.pi/4, [0, 1, 0])
+        
+        
     
     def addUAV(self, uav:UAV):
         self.uavs[uav.name] = uav
@@ -818,31 +909,67 @@ class Airspace(Scene3D):
             return
         print("new frame")
         self.last_update = time.time()
-        self.protocol_random()
+        # self.protocol_random()
+        self.protocol_avoidance()
         
         pass
 
-    def protocol_random(self):
-        stopped_uavs = []
-        for uav in self.uavs.values():
-            if np.all(uav.speed == 0):
-                stopped_uavs.append(uav)
-                continue
-        np.random.shuffle(stopped_uavs)
-        for uav in stopped_uavs[:len(stopped_uavs)//2]:
-            uav.speed = np.array([np.random.uniform(-0.1, 0.1) for _ in range(3)])
-        self.find_collisions_dt(self.dt, show=False)
-        time1 = time.time()
-        for uav in self.uavs.values():
-            direction = uav.direction
-            speed = uav.speed
-            dx, dy, dz = self.dt*speed*direction
+    def protocol_avoidance(self):
+
+        def angle_between_vectors(v1, v2):
+            v1 = v1 / np.linalg.norm(v1)
+            v2 = v2 / np.linalg.norm(v2)
+
+            dot = np.dot(v1, v2)
+            return np.arccos(dot)
+
+
+        def find_best_direction(uav, other_positions, number_of_divisions=4):
+            directions = np.array([[i,j,k] for i in range(number_of_divisions) for j in range(number_of_divisions) for k in range(number_of_divisions)])
+            max_dir = None
+            max_angle_sum= 0
+            vectors = np.array([other_pos-uav.position for other_pos in other_positions])
+            for direction in directions:
+                angles_sum = 0
+                for vector in vectors:
+                    angle = abs(angle_between_vectors(vector, direction))
+                    angles_sum += angle
+                if angles_sum > max_angle_sum:
+                    max_angle_sum = angles_sum
+                    max_dir = direction
+            return max_dir
+                
             
-            uav.move_by([dx, dy, dz])
-        non_zero_speeds = [uav.speed for uav in self.uavs.values() if np.any(uav.speed != 0)]
-        print(f"Time taken to update the UAVs: {time.time()-time1:.2f}s, {len(non_zero_speeds)} UAVs with non-zero speed")   
+
+        collides = self.find_collisions_dt_simple(self.dt, show=False)
+        uavs = list(self.uavs.values())
+        for i,uav in enumerate(self.uavs.values()):
+            if not i in collides:
+                continue
+            if not collides[i]:
+                continue
+            colliding = collides[i]
+            other_positions = [uavs[j].position for j in colliding]
+            best_direction = find_best_direction(uav, other_positions)
+            best_direction = best_direction/np.linalg.norm(best_direction)
+
+            uav.speed = 1*best_direction
+            print(f"Best direction for {uav.name}: {best_direction}")
+        
+        collides = self.find_collisions_dt_simple(self.dt, show=False)
+        for i,uav in enumerate(self.uavs.values()):
+            if not i in collides or not collides[i]:
+                uav.move_by(uav.speed*self.dt)
+                print(f"Moving {uav.name} by {uav.speed*self.dt}")
+                
+        
+        # non_zero_speeds = [uav.speed for uav in self.uavs.values() if np.any(uav.speed != 0)]
+        # print(f"Time taken to update the UAVs: {time.time()-time1:.2f}s, {len(non_zero_speeds)} UAVs with non-zero speed")   
         # speeds = [uav.speed for uav in self.uavs.values()]
         # print(f"Speeds: {speeds}")
+
+    # def protocol_avoidance(self):
+        
 
 class Kdop(Polyhedron3D):
 
@@ -1121,7 +1248,8 @@ def main():
     airspace = Airspace(1920, 1080, N = 5, dt=0.7)
 
     # airspace.create_random_uavs()
-    airspace.create_random_uavs_non_colliding()
+    # airspace.create_random_uavs_non_colliding()
+    airspace.create_time_colliding_uavs()
 
 
 
