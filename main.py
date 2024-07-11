@@ -924,20 +924,14 @@ class Airspace(Scene3D):
             return np.arccos(dot)
 
 
-        def find_best_direction(uav, other_positions, number_of_divisions=4):
-            directions = np.array([[i,j,k] for i in range(number_of_divisions) for j in range(number_of_divisions) for k in range(number_of_divisions)])
-            max_dir = None
-            max_angle_sum= 0
-            vectors = np.array([other_pos-uav.position for other_pos in other_positions])
-            for direction in directions:
-                angles_sum = 0
-                for vector in vectors:
-                    angle = abs(angle_between_vectors(vector, direction))
-                    angles_sum += angle
-                if angles_sum > max_angle_sum:
-                    max_angle_sum = angles_sum
-                    max_dir = direction
-            return max_dir
+        def find_best_direction(uav, other_positions, ):
+            vectors = [other_pos-uav.position for other_pos in other_positions]
+            vectors_normalized = [v/np.linalg.norm(v) for v in vectors]
+            sum_of_vectors = np.sum(vectors_normalized, axis=0)
+            sum_of_vectors = sum_of_vectors/np.linalg.norm(sum_of_vectors)
+            best_direction = -sum_of_vectors
+            return best_direction
+            
                 
             
 
