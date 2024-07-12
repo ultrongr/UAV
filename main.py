@@ -293,10 +293,13 @@ class UAV:
 
         hierarchy = [
             self.collides_aabb,
-            # self.collides_aabb_node,
-            self.collides_kdop,            
+            self.collides_aabb_node,
+            self.collides_kdop_trimesh,
+            self.collides_kdop,        
+            # self.collides_convex_hull_trimesh,    
             # self.collides_convex_hull,
             # self.collides_mesh_random,
+            # self.collides_mesh_trimesh,
             # self.collides_mesh,
         ]
         for i, method in enumerate(hierarchy):
@@ -369,6 +372,22 @@ class UAV:
             return False
         
         return self.boxes["kdop"].collides_lines(other.boxes["kdop"], show=show, scene=self.scene)
+    
+    def collides_kdop_trimesh(self, other: "UAV", show:bool = False):
+        if not self.boxes["kdop"]:
+            self.create_kdop(kdop_number)
+            self.remove_kdop()
+        if not other.boxes["kdop"]:
+            other.create_kdop(kdop_number)
+            other.remove_kdop()
+        dist = np.linalg.norm(self.position - other.position)
+        if dist>2:
+            return False
+        
+        kdop1 = self.boxes["kdop"]
+        kdop2 = other.boxes["kdop"]
+
+        return check_mesh_collision_trimesh(kdop1._shape, kdop2._shape)
 
     def collides_aabb_node(self, other: "UAV", show:bool = False):
         if not self.boxes["aabb_node"]:
@@ -431,6 +450,16 @@ class UAV:
     
         return False
     
+    def collides_mesh_trimesh(self, other: "UAV", show:bool = False):
+        dist = np.linalg.norm(self.position - other.position)
+        if dist>2:
+            return False
+        mesh1 = self.mesh
+        mesh2 = other.mesh
+
+        return check_mesh_collision_trimesh(mesh1, mesh2)
+    
+
     def collides_convex_hull(self, other: "UAV", show:bool = False):
 
 
@@ -501,7 +530,23 @@ class UAV:
                         #         arrow = Arrow3D(start, end, color=Color.BLUE, width=1)
                         #         self.scene.addShape(arrow, pair + f"_collision_arrow1_{j}{i}")
                     return True
-                  
+
+    def collides_convex_hull_trimesh(self, other: "UAV", show:bool = False):
+        if not self.boxes["chull"]:
+            self.create_convex_hull()
+            self.remove_convex_hull() # Hiding it since it wasnt visible before
+        if not other.boxes["chull"]:
+            other.create_convex_hull()
+            other.remove_convex_hull() # Hiding it since it wasnt visible before
+        dist = np.linalg.norm(self.position - other.position)
+        if dist>2:
+            return False
+
+        chull1 = self.boxes["chull"]
+        chull2 = other.boxes["chull"]
+
+        return check_mesh_collision_trimesh(chull1._shape, chull2._shape)
+
     def collides_mesh_random(self, other: "UAV", show:bool = False):
         dist = np.linalg.norm(self.position - self.position)
         if dist>2:
@@ -1137,7 +1182,10 @@ class Airspace(Scene3D):
         # self.protocol_target_beacon(show=False)
         # self.protocol_landing(show=False)
         if not self.protocol:
+            print("No protocol set")
             self.protocol_avoidance()
+        else:
+            self.protocol(show=False)
         
         pass
 
