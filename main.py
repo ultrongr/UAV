@@ -6,6 +6,7 @@ from open3d.visualization.gui import MouseEvent, KeyEvent # type: ignore
 from open3d.visualization.rendering import Camera # type: ignore
 import numpy as np
 import time
+import trimesh
 from vvrpywork.constants import Key, Mouse, Color
 from vvrpywork.scene import Scene2D, Scene3D, get_rotation_matrix, world_space
 from vvrpywork.shapes import (
@@ -23,9 +24,18 @@ unlitLine = rendering.MaterialRecord()
 unlitLine.shader = "unlitLine"
 unlitLine.line_width = 5
 
+def check_mesh_collision_trimesh(mesh1, mesh2):
+    trimesh1 = trimesh.Trimesh(vertices=mesh1.vertices, faces=mesh1.triangles)
+    trimesh2 = trimesh.Trimesh(vertices=mesh2.vertices, faces=mesh2.triangles)
+    collision_manager = trimesh.collision.CollisionManager()
+    collision_manager.add_object("trimesh1", trimesh1)
+    collision_manager.add_object("trimesh2", trimesh2)
+    
+    return collision_manager.in_collision_internal()
+
 models = [#"v22_osprey",
-        # "twin_copter",
-        # "F52",
+        "twin_copter",
+        "F52",
         "Helicopter",
         # "quadcopter_scifi",
         
@@ -33,7 +43,7 @@ models = [#"v22_osprey",
         # "B2_Spirit", ## small kdop issue
         
     ]
-show_times = True
+show_times = False
 kdop_number = 14
 speed_constant = 0.5
 np.random.seed(123456)
@@ -69,6 +79,7 @@ class UAV:
             "sphere": None,
             "kdop": None,
             "aabb_node": None,
+            "continuous": None,
         }
         self.boxes_visibility = {
             "aabb": False,
@@ -224,21 +235,41 @@ class UAV:
             hull_mesh = Mesh3D(color=Color.BLUE)
             hull_mesh._shape.vertices=o3d.utility.Vector3dVector(hull.vertices)
             hull_mesh._shape.triangles=o3d.utility.Vector3iVector(hull.triangles)
+            # print(len(hull.vertices), len(hull.triangles))
             return hull_mesh
         
+
+
         if show:
             self.scene.removeShape(self.name+other.name+"_continuous")
             self.scene.removeShape(other.name+self.name+"_continuous")
 
-        continuous1 = get_continuous_kdop(self, dt)
-        continuous2 = get_continuous_kdop(other, dt)
 
+        if np.linalg.norm(self.position - other.position)>2:
+            if np.linalg.norm(self.position+dt*self.speed - other.position-dt*other.speed)>2:
+
+                return False
         
-        # print("created continuous kdops")
+        if not self.boxes.get("continuous"):
+            self.boxes["continuous"] = get_continuous_kdop(self, dt)
+
+        if not other.boxes.get("continuous"):
+            other.boxes["continuous"] = get_continuous_kdop(other, dt)
+
+            
+        
 
 
-        if continuous1.collides(continuous2):
+        continuous1 = self.boxes["continuous"]
+        continuous2 = other.boxes["continuous"]
+
+
+
+
+        if check_mesh_collision_trimesh(continuous1._shape, continuous2._shape):
+
             if show:
+                print("showing collision")
 
                 self.scene.addShape(continuous1, self.name+other.name+"_continuous")
                 self.scene.addShape(continuous2, other.name+self.name+"_continuous")
@@ -248,7 +279,7 @@ class UAV:
 
     def collides(self, other: "UAV", show:bool = False):
         """Check if the UAV collides with another UAV
-        The collision check is done usng several methods following a hierarchical order"""
+        The collision check is done using several methods following a hierarchical order"""
         
 
 
@@ -802,16 +833,21 @@ class Airspace(Scene3D):
     
     def find_collisions_dt(self, dt:float, show:bool = False):
         colliding = {}
+        for i, uav in enumerate(self.uavs.values()): # Resetting the continuous boxes
+            uav.boxes["continuous"] = None
 
         for i, uav1 in enumerate(self.uavs.values()):
             colliding[i] = set()
             for j, uav2 in enumerate(self.uavs.values()):
+                if i == j:
+                    continue
                 if uav1.collides_dt(uav2, dt, show=show):
                     # print(f"!!!{uav1.name} collides with {uav2.name}!!!")
                     colliding[i].add(j)
                     
                 else:
                     continue
+        return colliding
         
 
     def on_key_press(self, symbol, modifiers):
@@ -838,7 +874,8 @@ class Airspace(Scene3D):
                     uav.create_aabb()
         
         if symbol == Key.K:
-            for uav in self.uavs.values():
+            for i,uav in enumerate(self.uavs.values()):
+                # if  i==18 or i==17:
                 if uav.boxes_visibility["kdop"]:
                     uav.remove_kdop()
                 else:
@@ -928,7 +965,7 @@ class Airspace(Scene3D):
 
         def find_best_direction(uav, other_positions, ):
             vectors = [other_pos-uav.position for other_pos in other_positions]
-            vectors_normalized = [v/np.linalg.norm(v) for v in vectors]
+            vectors_normalized = [v/np.linalg.norm(v) for v in vectors if v.any()]
             sum_of_vectors = np.sum(vectors_normalized, axis=0)
             sum_of_vectors = sum_of_vectors/np.linalg.norm(sum_of_vectors)
             best_direction = -sum_of_vectors
@@ -936,8 +973,10 @@ class Airspace(Scene3D):
             
                 
             
-
-        collides = self.find_collisions_dt_simple(self.dt, show=False)
+        time1 = time.time()
+        collides = self.find_collisions_dt(self.dt, show=True)
+        if show_times:
+            print(f"Time taken to find the collisions(1): {time.time()-time1:.2f}s")
         uavs = list(self.uavs.values())
         for i,uav in enumerate(self.uavs.values()):
             if not i in collides:
@@ -948,11 +987,11 @@ class Airspace(Scene3D):
             other_positions = [uavs[j].position for j in colliding]
             best_direction = find_best_direction(uav, other_positions)
             best_direction = best_direction/np.linalg.norm(best_direction)
-            # print(f"Best direction for {uav.name}: {best_direction}")
-            uav.speed = 0.1*best_direction
-            # print(f"Best direction for {uav.name}: {best_direction}")
-        
-        collides = self.find_collisions_dt_simple(self.dt, show=False)
+            uav.speed = speed_constant*best_direction
+        time2 = time.time()
+        collides = self.find_collisions_dt(self.dt, show=False)
+        if show_times:
+            print(f"Time taken to find the collisions(2): {time.time()-time2:.2f}s")
         for i,uav in enumerate(self.uavs.values()):
             if not i in collides or not collides[i]:
                 uav.move_by(uav.speed*self.dt)
@@ -1244,7 +1283,7 @@ def main():
 
 
     
-    airspace = Airspace(1920, 1080, N = 5, dt=0.5)
+    airspace = Airspace(1920, 1080, N = 5, dt=1)
 
     # airspace.create_random_uavs()
     airspace.create_random_uavs_non_colliding()

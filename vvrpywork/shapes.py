@@ -2649,7 +2649,7 @@ class Mesh3D(ShapeSet):
 
         for i in range(len(self.triangles)):
             triangle = self._shape.triangles[i]
-            vertices = other.vertices[triangle]
+            vertices = self.vertices[triangle]
             for i in range(3):
                 if np.all(vertices[:, i]<min1[i]) or np.all(vertices[:, i]>max1[i]):
                     break
@@ -2658,7 +2658,7 @@ class Mesh3D(ShapeSet):
         
         for i in range(len(other.triangles)):
             triangle = other._shape.triangles[i]
-            vertices = self.vertices[triangle]
+            vertices = other.vertices[triangle]
             for i in range(3):
                 if np.all(vertices[:, i]<min2[i]) or np.all(vertices[:, i]>max2[i]):
                     break

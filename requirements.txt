@@ -57,3 +57,5 @@ wcwidth==0.2.13
 Werkzeug==3.0.1
 widgetsnbextension==4.0.10
 zipp==3.18.0
+python-fcl
+trimesh
