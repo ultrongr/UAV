@@ -883,7 +883,7 @@ class Airspace(Scene3D):
                 uav = UAV(self, filename, position=position, scale=None)
                 rotation_angle = np.random.uniform(0, 2*np.pi)
                 uav.rotate(rotation_angle, [0, 1, 0])
-                self.landing_spots[uav.name] = Sphere3D(p=[2*i+1, 0, 2*j+1], radius=0.1, resolution=30, color = colors[(i+j)%len(colors)])
+                self.landing_spots[uav.name] = Sphere3D(p=[2*i+1, 0.1, 2*j+1], radius=0.1, resolution=30, color = colors[(i+j)%len(colors)])
                 self.addShape(self.landing_spots[uav.name], uav.name+"_landing_spot")
 
 
