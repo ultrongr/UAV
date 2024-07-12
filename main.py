@@ -269,7 +269,6 @@ class UAV:
         if check_mesh_collision_trimesh(continuous1._shape, continuous2._shape):
 
             if show:
-                print("showing collision")
 
                 self.scene.addShape(continuous1, self.name+other.name+"_continuous")
                 self.scene.addShape(continuous2, other.name+self.name+"_continuous")
@@ -811,25 +810,7 @@ class Airspace(Scene3D):
                     # print(f"{uav1} does not collide with {uav2}")
                     continue
 
-    def find_collisions_dt_simple(self, dt:float, show:bool = False):
-        uav_names = list(self.uavs.keys())
-        start_time = time.time()
-        colliding = {}
 
-        for i, uav1 in enumerate(uav_names):
-            colliding[i] = set()
-            for j, uav2 in enumerate(uav_names):
-                if uav1 == uav2:
-                    continue
-                
-                if self.uavs[uav1].collides_dt(self.uavs[uav2], dt, show=show):
-                    # print(f"!!!{uav1} collides with {uav2}!!!")
-                    colliding[i].add(j)
-                    
-                    
-                else:
-                    continue
-        return colliding
     
     def find_collisions_dt(self, dt:float, show:bool = False):
         colliding = {}
@@ -946,9 +927,9 @@ class Airspace(Scene3D):
             return
         if time.time() - self.last_update < self.dt:
             return
-        print("new frame", time.time()-self.last_update)
+        if show_times:
+            print("new frame", time.time()-self.last_update)
         self.last_update = time.time()
-        # self.protocol_random()
         self.protocol_avoidance()
         
         pass
