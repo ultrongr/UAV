@@ -35,6 +35,7 @@ models = [#"v22_osprey",
     ]
 show_times = True
 kdop_number = 14
+speed_constant = 0.5
 np.random.seed(123456)
 # np.random.seed(12345)
 # np.random.seed(1234)
@@ -81,7 +82,7 @@ class UAV:
         self.direction = np.array([0, 0, -1])
         if "Helicopter" in filename: # Correcting incorrect rotation of mesh to aline with direction
             self.direction = np.array([1, 0, 0])
-        self.speed = np.array([0.1, 0.1, 0.1])
+        self.speed = 0.5*self.direction
         if position:            
             self.move_to(position)
         
@@ -148,6 +149,7 @@ class UAV:
         self.mesh._update(self.name, self.scene)
         self.position = old_position
         self.direction = np.dot(self.direction, R)
+        self.speed = 0.5*self.direction
 
 
         for box_name in self.boxes.keys():
@@ -907,7 +909,7 @@ class Airspace(Scene3D):
             return
         if time.time() - self.last_update < self.dt:
             return
-        print("new frame")
+        print("new frame", time.time()-self.last_update)
         self.last_update = time.time()
         # self.protocol_random()
         self.protocol_avoidance()
@@ -946,15 +948,18 @@ class Airspace(Scene3D):
             other_positions = [uavs[j].position for j in colliding]
             best_direction = find_best_direction(uav, other_positions)
             best_direction = best_direction/np.linalg.norm(best_direction)
-
-            uav.speed = 1*best_direction
-            print(f"Best direction for {uav.name}: {best_direction}")
+            # print(f"Best direction for {uav.name}: {best_direction}")
+            uav.speed = 0.1*best_direction
+            # print(f"Best direction for {uav.name}: {best_direction}")
         
         collides = self.find_collisions_dt_simple(self.dt, show=False)
         for i,uav in enumerate(self.uavs.values()):
             if not i in collides or not collides[i]:
                 uav.move_by(uav.speed*self.dt)
-                print(f"Moving {uav.name} by {uav.speed*self.dt}")
+                # print(f"Moving {uav.name} by {uav.speed*self.dt}")
+        
+        # speeds = [uav.speed for uav in self.uavs.values()]
+        # print(f"Speeds: {speeds}")
                 
         
         # non_zero_speeds = [uav.speed for uav in self.uavs.values() if np.any(uav.speed != 0)]
@@ -1239,11 +1244,11 @@ def main():
 
 
     
-    airspace = Airspace(1920, 1080, N = 5, dt=0.7)
+    airspace = Airspace(1920, 1080, N = 5, dt=0.5)
 
     # airspace.create_random_uavs()
-    # airspace.create_random_uavs_non_colliding()
-    airspace.create_time_colliding_uavs()
+    airspace.create_random_uavs_non_colliding()
+    # airspace.create_time_colliding_uavs()
 
 
 
