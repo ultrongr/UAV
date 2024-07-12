@@ -808,6 +808,9 @@ class Airspace(Scene3D):
         self.find_collisions_dt(self.dt, show=True)
 
     def create_taking_off_uavs(self, dome_radius:float = 15):
+
+        self.protocol = self.protocol_taking_off
+
         def random_point_on_upper_hemisphere(radius=15, center=[0, 0, 0]):
             # Generate random angles
             dth = np.pi/4
@@ -854,6 +857,9 @@ class Airspace(Scene3D):
                 self.addShape(self.beacons[uav.name], uav.name+"_beacon")
 
     def create_landing_uavs(self, dome_radius:float = 15):
+
+        self.protocol = self.protocol_landing
+
         def random_point_on_upper_hemisphere(radius=15, center=[0, 0, 0]):
             # Generate random angles
             dth = np.pi/4
@@ -898,6 +904,7 @@ class Airspace(Scene3D):
                 self.addShape(self.landing_spots[uav.name], uav.name+"_landing_spot")
 
     def create_landing_uavs_time(self, dome_radius:float = 15, flow:float = 0.5):
+        self.protocol = self.protocol_landing
         self.method = "landing_time"
 
         self.new_uavs_flow = flow
@@ -911,6 +918,8 @@ class Airspace(Scene3D):
 
         for i in range(self.N*self.N//3):
             self.create_new_landing_uav()
+        
+        
 
     def create_new_landing_uav(self):
 
@@ -1126,7 +1135,9 @@ class Airspace(Scene3D):
 
         # self.protocol_avoidance()
         # self.protocol_target_beacon(show=False)
-        self.protocol_landing(show=False)
+        # self.protocol_landing(show=False)
+        if not self.protocol:
+            self.protocol_avoidance()
         
         pass
 
