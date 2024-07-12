@@ -2802,27 +2802,18 @@ class Triangle3D(Mesh3D):
         '''The first point of the triangle.'''
         return np.copy(np.asarray(self._shape.vertices[0]))
     
-    # @p1.setter
-    # def p1(self, p1:Point3D):
-    #     self._shape.vertices[0] = p1
 
     @property
     def p2(self) -> NDArray:
         '''The second point of the triangle.'''
         return np.copy(np.asarray(self._shape.vertices[1]))
     
-    # @p2.setter
-    # def p2(self, p2:Point3D):
-    #     self._shape.vertices[1] = p2
 
     @property
     def p3(self) -> NDArray:
         '''The third point of the triangle.'''
         return np.copy(np.asarray(self._shape.vertices[2]))
-    
-    # @p3.setter
-    # def p3(self, p3:Point3D):
-    #     self._shape.vertices[2] = p3
+
 
     def __eq__(self, other:Triangle3D) :
         return np.array_equal(self.p1, other.p1) and np.array_equal(self.p2, other.p2) and np.array_equal(self.p3, other.p3)
@@ -3014,6 +3005,14 @@ class ConvexPolygon3D(Mesh3D):
     
 
     def points_on_same_side(self, p1:NDArray, p2:NDArray): #-> bool:
+        """Checks if two points are on the same side of the convex polygon.
+        
+        Args:
+            p1: The first point to check.
+            p2: The second point to check.
+            
+        Returns:
+            Whether the two points are on the same side of the convex polygon."""
         self.normal = np.cross(self.points[1] - self.points[0], self.points[2] - self.points[0])
 
         plane_eq = np.concatenate((self.normal, [-np.dot(self.normal, self.center)]))
@@ -3152,14 +3151,7 @@ class ConvexPolygon3D(Mesh3D):
         
         return None
 
-        # return intersection_point if t >= 0 and t <= 1 else None
 
-
-
-
-
-
-        return
       
 
     @property
@@ -3175,6 +3167,7 @@ class ConvexPolygon3D(Mesh3D):
 
 
 class Polyhedron3D(Mesh3D):
+    """A class used to represent a polyhedron in 3D space. It is made up of multiple convex polygons."""
     def __init__(self, faces:list[ConvexPolygon3D]|NDArray, name: str, color:ColorType=(0, 0, 0)):
         self._color = [*color, 1] if len(color) == 3 else [*color]
         self._polygons = []
@@ -3202,6 +3195,8 @@ class Polyhedron3D(Mesh3D):
         self._shape.triangles = o3d.utility.Vector3iVector(_triangles)
     
     def collides(self, other:Polyhedron3D):
+        """Checks if this polyhedron collides with another.
+        It does so by checking if any of the polygons of this polyhedron collide with any of the polygons of the other polyhedron."""
         for polygon in self._polygons:
             for other_polygon in other._polygons:
                 if polygon.collides(other_polygon):
@@ -3299,13 +3294,11 @@ class Polyhedron3D(Mesh3D):
                 for line in other_lines:
                     line_counter+=1
                     intersection = polygon.intersects_line(line)
+
                     if intersection is None:
                         continue
-                    # print("Collision detected")
-                    # print("Counter1:", counter1, "Counter2:", counter2, "Line Counter:", line_counter)
+
                     if show and scene:
-                        # print("Collision detected")
-                        # print("intersection", intersection)
                         copy_intersection = Point3D(intersection, color=(0, 0, 1), size=3)
                         scene.addShape(copy_intersection, name=pair +"collision_intersection")
 
@@ -3324,6 +3317,7 @@ class Polyhedron3D(Mesh3D):
 
 
     def contains_point(self, point:NDArray, center:NDArray):
+        """Checks if the polyhedron contains a point."""
         polygon_index = -1
         for i, polygon in enumerate(self._polygons):
             if not polygon.points_on_same_side(center, point):
@@ -3352,25 +3346,19 @@ class Polyhedron3D(Mesh3D):
     def _addToScene(self, scene: Scene3D, name: None | str):
         for i, polygon in enumerate(self._polygons):
             polygon._addToScene(scene, name + f"_face_{i}")
-            # print("Added polygon", name+f"_face_{i}")
         scene._shapeDict[name] = self
     
     
     def move_by(self, distance:NDArray):
-        # self._shape.translate(distance)
         self.vertices = self.vertices + distance
         
         for polygon in self._polygons:
-            # polygon.vertices = polygon.vertices + distance
-            # polygon.center = polygon.center + distance
             polygon.points = polygon.points + distance
 
     def rotate(self, R:NDArray , center:NDArray):
-        # print(self.vertices)
         self.vertices-=center
         self.vertices = np.dot(self.vertices, R)
         self.vertices+=center
-        # print(self.vertices)
 
         for polygon in self._polygons:
             polygon.points-=center
@@ -3396,6 +3384,7 @@ class AabbNode:
             self.create_children()
     
     def create_children(self):
+        """Creates children for this aabb_node."""
 
         conditions = [
         (self.points[:, 0] < self.center[0]) & (self.points[:, 1] < self.center[1]) & (self.points[:, 2] < self.center[2]),
@@ -3423,6 +3412,15 @@ class AabbNode:
 
 
     def collides(self, other:AabbNode, show=False, scene=None):
+        """Checks if this aabb_node collides with another aabb_node.
+        If the limits overlap, check the children of each node.
+        If the node has no children, then they collide
+        
+        Args:
+            other: The other aabb_node to check for collision.
+            show: Whether to show the collision shapes.
+            scene: The scene to show the collision shapes.
+        """
         if self.minx > other.maxx or self.maxx < other.minx:
             return False
         if self.miny > other.maxy or self.maxy < other.miny:
@@ -3449,15 +3447,4 @@ class AabbNode:
                         return True
         
         return False
-    
 
-
-class AabbTree:
-    def __init__(self, points:NDArray, max_depth:int=10):
-        self._points = points
-        self._max_depth = max_depth
-    
-
-    def find_collisions(self, other:AabbTree):
-        pass
-        

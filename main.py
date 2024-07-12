@@ -1730,11 +1730,10 @@ class Kdop(Polyhedron3D):
 
 
         
-        
 
-        # print(f"14DOP: {time.time()-start:.2f}s")
     
     def create_from_class(self):
+        """If a kdop is already created for the UAV class, then copy that kdop"""
         import time
 
         time1 = time.time()
@@ -1776,6 +1775,14 @@ class Kdop(Polyhedron3D):
             Kdop.classes_to_kdop[self.uav._class] = (self.uav.position, self.uav.direction, self)
 
 def check_mesh_collision_trimesh(mesh1, mesh2):
+    """Check if two meshes collide using trimesh, an external library
+    Inputs:
+    - mesh1: the first mesh
+    - mesh2: the second mesh
+    Outputs:
+    - True if the meshes collide, False otherwise
+    """
+    
     trimesh1 = trimesh.Trimesh(vertices=mesh1.vertices, faces=mesh1.triangles)
     trimesh2 = trimesh.Trimesh(vertices=mesh2.vertices, faces=mesh2.triangles)
     collision_manager = trimesh.collision.CollisionManager()
