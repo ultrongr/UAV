@@ -24,14 +24,7 @@ unlitLine = rendering.MaterialRecord()
 unlitLine.shader = "unlitLine"
 unlitLine.line_width = 5
 
-def check_mesh_collision_trimesh(mesh1, mesh2):
-    trimesh1 = trimesh.Trimesh(vertices=mesh1.vertices, faces=mesh1.triangles)
-    trimesh2 = trimesh.Trimesh(vertices=mesh2.vertices, faces=mesh2.triangles)
-    collision_manager = trimesh.collision.CollisionManager()
-    collision_manager.add_object("trimesh1", trimesh1)
-    collision_manager.add_object("trimesh2", trimesh2)
-    
-    return collision_manager.in_collision_internal()
+
 
 models = ["v22_osprey",
         "twin_copter",
@@ -45,11 +38,10 @@ models = ["v22_osprey",
     ]
 show_times = False
 kdop_number = 14
-speed_constant = 0.3
+speed_constant = 1
 np.random.seed(123456)
 # np.random.seed(12345)
 # np.random.seed(1234)
-
 
 
 
@@ -211,6 +203,13 @@ class UAV:
 
     def collides_dt(self, other: "UAV", dt:float, show:bool = False):
 
+
+        # Define what method you want to use after the kdop continuous has detected collision:
+        # Possible choices: None, collides_aabb_node, collides_aabb, Collides_kdop, collides_convex_hull, collides_mesh_random, collides_mesh
+        # extra_method = self.collides_aabb_node # Quite slower but more accurate
+        extra_method = None # No extra method, makes it way faster
+        number_of_extra_checks = 2
+
         def get_continuous_kdop(uav: "UAV", dt:float):
             
             if not uav.boxes["kdop"]:
@@ -246,8 +245,8 @@ class UAV:
             self.scene.removeShape(other.name+self.name+"_continuous")
 
 
-        if np.linalg.norm(self.position - other.position)>2:
-            if np.linalg.norm(self.position+dt*self.speed - other.position-dt*other.speed)>2:
+        if np.linalg.norm(self.position - other.position)>3: # Dont bother with very distant UAVs
+            if np.linalg.norm(self.position+dt*self.speed - other.position-dt*other.speed)>3:
 
                 return False
         
@@ -257,17 +256,26 @@ class UAV:
         if not other.boxes.get("continuous"):
             other.boxes["continuous"] = get_continuous_kdop(other, dt)
 
-            
-        
-
 
         continuous1 = self.boxes["continuous"]
         continuous2 = other.boxes["continuous"]
 
 
-
-
         if check_mesh_collision_trimesh(continuous1._shape, continuous2._shape):
+
+            if extra_method:
+                other_position = other.position
+                self_position = self.position
+                self_dx = self.speed*dt/number_of_extra_checks
+                other_dx = other.speed*dt/number_of_extra_checks
+                for i in range(1, number_of_extra_checks+1):
+                    self.move_by(self_dx)
+                    other.move_by(other_dx)
+                    if extra_method(other, show=show):
+                        return True
+                self.move_to(self_position)
+                other.move_to(other_position)
+                    
 
             if show:
 
@@ -493,8 +501,7 @@ class UAV:
                         #         arrow = Arrow3D(start, end, color=Color.BLUE, width=1)
                         #         self.scene.addShape(arrow, pair + f"_collision_arrow1_{j}{i}")
                     return True
-
-                        
+                  
     def collides_mesh_random(self, other: "UAV", show:bool = False):
         dist = np.linalg.norm(self.position - self.position)
         if dist>2:
@@ -726,6 +733,7 @@ class Airspace(Scene3D):
 
         self.beacons: dict[str] = {}
         self.landing_spots: dict[str] = {}
+        self.mode:str = None # Can be avoidance/landing/target_beacon
 
     def create_uavs(self):
         for i in range(self.N):
@@ -916,6 +924,10 @@ class Airspace(Scene3D):
 
     
     def find_collisions_dt(self, dt:float, show:bool = False):
+
+        
+
+
         colliding = {}
         for i, uav in enumerate(self.uavs.values()): # Resetting the continuous boxes
             uav.boxes["continuous"] = None
@@ -1030,6 +1042,10 @@ class Airspace(Scene3D):
             return
         if time.time() - self.last_update < self.dt:
             return
+        if self.simulation_has_ended():
+            print("Simulation has ended")
+
+            return
         if show_times:
             print("new frame", time.time()-self.last_update)
         self.last_update = time.time()
@@ -1040,6 +1056,7 @@ class Airspace(Scene3D):
         pass
 
     def protocol_avoidance(self):
+        self.mode = "avoidance"
 
 
         def find_best_direction(uav, other_positions, ):
@@ -1085,6 +1102,7 @@ class Airspace(Scene3D):
         # print(f"Speeds: {speeds}")
 
     def protocol_target_beacon(self, show = True):
+        self.mode = "target_beacon"
 
         def find_best_direction(uav, other_positions, beacon_position):
 
@@ -1154,7 +1172,7 @@ class Airspace(Scene3D):
                 uav.number_of_stationary_frames += 1
 
     def protocol_landing(self, show = True):
-        # print("Landing protocol")
+        self.mode = "landing"
         def find_best_direction(uav, other_positions, landing_spot_position):
 
             if uav.has_reached_landing_spot(self.landing_spots[uav.name], threshold=0.1):
@@ -1222,6 +1240,18 @@ class Airspace(Scene3D):
             else:
                 uav.number_of_stationary_frames += 1
     
+    def simulation_has_ended(self):
+        if self.mode == "landing":
+            for uav in self.uavs.values():
+                if not uav.has_reached_landing_spot(self.landing_spots[uav.name], threshold=0.1):
+                    return False
+            return True
+        if self.mode == "target_beacon":
+            for uav in self.uavs.values():
+                if not uav.has_reached_beacon(self.beacons[uav.name], threshold=0.1):
+                    return False
+            return True
+        return False
         
 
 class Kdop(Polyhedron3D):
@@ -1494,11 +1524,21 @@ class Kdop(Polyhedron3D):
         if self.uav and "_0" in self.uav._class:
             Kdop.classes_to_kdop[self.uav._class] = (self.uav.position, self.uav.direction, self)
 
+def check_mesh_collision_trimesh(mesh1, mesh2):
+    trimesh1 = trimesh.Trimesh(vertices=mesh1.vertices, faces=mesh1.triangles)
+    trimesh2 = trimesh.Trimesh(vertices=mesh2.vertices, faces=mesh2.triangles)
+    collision_manager = trimesh.collision.CollisionManager()
+    collision_manager.add_object("trimesh1", trimesh1)
+    collision_manager.add_object("trimesh2", trimesh2)
+    
+    return collision_manager.in_collision_internal()
+
+
 def main():
 
 
     
-    airspace = Airspace(1920, 1080, N = 5, dt=1)
+    airspace = Airspace(1920, 1080, N = 5, dt=0.2)
 
     # airspace.create_random_uavs()
     # airspace.create_random_uavs_non_colliding()
