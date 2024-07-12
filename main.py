@@ -93,6 +93,7 @@ class UAV:
         self.scale(scale, fit_to_unit_sphere= (not scale))
 
     def __eq__(self, other):
+        """Check if two UAVs are equal"""
         return self.name == other.name
 
 
@@ -107,7 +108,7 @@ class UAV:
         self.position = new_position
         self.mesh._update(self.name, self.scene)
 
-        for box_name in self.boxes.keys():
+        for box_name in self.boxes.keys(): # Move all the boxes as well
             if not self.boxes.get(box_name):
                 continue
             
@@ -156,7 +157,7 @@ class UAV:
         self.speed = 0.5*self.direction
 
 
-        for box_name in self.boxes.keys():
+        for box_name in self.boxes.keys(): # Rotate all the boxes as well
             if not self.boxes.get(box_name):
                 continue
             box = self.boxes[box_name]
@@ -184,25 +185,22 @@ class UAV:
                     self.create_convex_hull()
 
     # def is_stopped(self):
-        
-
-    def collides_dt_simple(self, other: "UAV", dt:float, show:bool = False):
-        """Check if the UAV collides with another UAV after moving by the specified distance"""
-        new_pos = self.position + dt*self.speed*self.direction
-        other_new_pos = other.position + dt*other.speed*other.direction
-        
-        if np.linalg.norm(new_pos - other_new_pos)>2:
-            return False
-        old_position = self.position
-        self.move_by(dt*self.speed*self.direction)
-        other.move_by(dt*other.speed*other.direction)
-        collides = self.collides(other, show)
-        other.move_by(-dt*other.speed*other.direction)
-        self.move_to(old_position)
-        return collides
 
     def collides_dt(self, other: "UAV", dt:float, show:bool = False):
-
+        """Check if the UAV collides with another UAV at the specified time step
+        This method uses a continuous kdop that represents all the kdop positions during a continuous
+        movement of the UAVs. For reasons of efficiency, for most examples only the continuous kdop is used,
+        however, an extra method has been implemented which -after the continuous kdop has detected a collision- 
+        it checks for a collision in discrete time steps smaller than dt. The method used, as well as the number of 
+        timesteps is defined below.
+        
+        Inputs:
+        - other: the other UAV
+        - dt: the time step
+        - show: whether to show the collision boxes
+        
+        Returns:
+        - True if the UAVs collide, False otherwise"""
 
         # Define what method you want to use after the kdop continuous has detected collision:
         # Possible choices: None, collides_aabb_node, collides_aabb, Collides_kdop, collides_convex_hull, collides_mesh_random, collides_mesh
@@ -210,7 +208,7 @@ class UAV:
         extra_method = None # No extra method, makes it way faster
         number_of_extra_checks = 2
 
-        def get_continuous_kdop(uav: "UAV", dt:float):
+        def get_continuous_kdop(uav: "UAV", dt:float): # Create a continuous kdop for the UAV, which is the chull of the kdop of the initial and final position
             
             if not uav.boxes["kdop"]:
                 uav.create_kdop(kdop_number)
@@ -263,7 +261,7 @@ class UAV:
 
         if check_mesh_collision_trimesh(continuous1._shape, continuous2._shape):
 
-            if extra_method:
+            if extra_method: # Check for collision in smaller time steps, only checks for discrete times
                 other_position = other.position
                 self_position = self.position
                 self_dx = self.speed*dt/number_of_extra_checks
@@ -287,7 +285,15 @@ class UAV:
 
     def collides(self, other: "UAV", show:bool = False):
         """Check if the UAV collides with another UAV
-        The collision check is done using several methods following a hierarchical order"""
+        The collision check is done using several methods following a hierarchical order
+        
+        
+        Inputs:
+        - other: the other UAV
+        - show: whether to show the collision boxes
+        
+        Returns:
+        - True if the UAVs collide, False otherwise"""
         
 
 
@@ -312,6 +318,16 @@ class UAV:
         return True
 
     def collides_aabb(self, other: "UAV", show:bool = False):
+        """
+        Check if the UAV collides with another UAV using axis-aligned bounding boxes
+        Inputs:
+        - other: the other UAV
+        - show: whether to show the collision boxes
+        
+        Returns:
+        - True if the UAVs collide, False otherwise"""
+
+
         if not self.boxes["aabb"]:
             self.create_aabb()
             self.remove_aabb() # Hiding it since it wasnt visible before
@@ -355,6 +371,13 @@ class UAV:
         return True
 
     def collides_kdop(self, other: "UAV", show:bool = False):
+        """Check if the UAV collides with another UAV using k-dops
+        Inputs:
+        - other: the other UAV
+        - show: whether to show the collision boxes
+        
+        Returns:
+        - True if the UAVs collide, False otherwise"""
         if not self.boxes["kdop"]:
             self.create_kdop(kdop_number)
             self.remove_kdop() # Hiding it since it wasnt visible before
@@ -374,6 +397,13 @@ class UAV:
         return self.boxes["kdop"].collides_lines(other.boxes["kdop"], show=show, scene=self.scene)
     
     def collides_kdop_trimesh(self, other: "UAV", show:bool = False):
+        """Check if the UAV collides with another UAV using k-dops, and the mesh collision check is done using trimesh
+        Inputs:
+        - other: the other UAV
+        - show: whether to show the collision boxes (not used)
+        
+        Returns:
+        - True if the UAVs collide, False otherwise"""
         if not self.boxes["kdop"]:
             self.create_kdop(kdop_number)
             self.remove_kdop()
@@ -390,6 +420,14 @@ class UAV:
         return check_mesh_collision_trimesh(kdop1._shape, kdop2._shape)
 
     def collides_aabb_node(self, other: "UAV", show:bool = False):
+        """Check if the UAV collides with another UAV using axis-aligned bounding boxes and aabb nodes
+        Inputs:
+        - other: the other UAV
+        - show: whether to show the collision boxes
+        
+        Returns:
+        - True if the UAVs collide, False otherwise"""
+
         if not self.boxes["aabb_node"]:
             self.create_aabb_node()
         if not other.boxes["aabb_node"]:
@@ -407,6 +445,13 @@ class UAV:
        
 
     def collides_mesh(self, other: "UAV", show:bool = False):
+        """Check if the UAV collides with another UAV using the mesh collision check, this method is quite slow
+        Inputs:
+        - other: the other UAV
+        - show: whether to show the collision boxes
+        
+        Returns:
+        - True if the UAVs collide, False otherwise"""
         dist = np.linalg.norm(self.position - other.position)
         if dist>2:
             return False
@@ -451,6 +496,13 @@ class UAV:
         return False
     
     def collides_mesh_trimesh(self, other: "UAV", show:bool = False):
+        """Check if the UAV collides with another UAV using the mesh collision check (using the trimesh mesh collision check), this method is quite slow
+        Inputs:
+        - other: the other UAV
+        - show: whether to show the collision boxes (not used)
+        
+        Returns:
+        - True if the UAVs collide, False otherwise"""
         dist = np.linalg.norm(self.position - other.position)
         if dist>2:
             return False
@@ -461,6 +513,13 @@ class UAV:
     
 
     def collides_convex_hull(self, other: "UAV", show:bool = False):
+        """Check if the UAV collides with another UAV using the convex hull collision check
+        Inputs:
+        - other: the other UAV
+        - show: whether to show the collision boxes
+        
+        Returns:
+        - True if the UAVs collide, False otherwise"""
 
 
 
@@ -532,6 +591,13 @@ class UAV:
                     return True
 
     def collides_convex_hull_trimesh(self, other: "UAV", show:bool = False):
+        """Check if the UAV collides with another UAV using the convex hull collision check (using the trimesh mesh collision check)
+        Inputs:
+        - other: the other UAV
+        - show: whether to show the collision boxes (not used)
+        
+        Returns:
+        - True if the UAVs collide, False otherwise"""
         if not self.boxes["chull"]:
             self.create_convex_hull()
             self.remove_convex_hull() # Hiding it since it wasnt visible before
@@ -548,6 +614,13 @@ class UAV:
         return check_mesh_collision_trimesh(chull1._shape, chull2._shape)
 
     def collides_mesh_random(self, other: "UAV", show:bool = False):
+        """Check if the UAV collides with another UAV using by checking a random subset of triangles
+        Inputs:
+        - other: the other UAV
+        - show: whether to show the collision boxes (not used)
+        
+        Returns:
+        - True if the UAVs collide, False otherwise"""
         dist = np.linalg.norm(self.position - self.position)
         if dist>2:
             return False
@@ -620,10 +693,24 @@ class UAV:
         return False
     
     def has_reached_beacon(self, beacon, threshold:float = 0.1):
+        """Check if the UAV has reached the specified beacon
+        Inputs:
+        - beacon: the beacon
+        - threshold: the distance threshold
+        
+        Returns:
+        - True if the UAV has reached the beacon, False otherwise"""
         dist = np.linalg.norm(self.position - np.array([beacon.x, beacon.y, beacon.z]))
         return dist < threshold
 
     def has_reached_landing_spot(self, landing_spot, threshold:float = 0.1):
+        """Check if the UAV has reached the specified landing spot
+        Inputs:
+        - landing_spot: the landing spot
+        - threshold: the distance threshold
+
+        Returns:
+        - True if the UAV has reached the landing spot, False otherwise"""
         dist = np.linalg.norm(self.position - np.array([landing_spot.x, landing_spot.y, landing_spot.z]))
         return dist < threshold
 
@@ -725,8 +812,6 @@ class UAV:
         else:
             self.boxes_visibility["kdop"] = True
             self.scene.addShape(self.boxes["kdop"], self.name+"_kdop")
-            # for i, face in enumerate(self.boxes["kdop"]._polygons):
-            #     self.scene.addShape(face, self.name+"_kdop_face_"+str(i))
             return
 
     def remove_kdop(self):
@@ -784,6 +869,7 @@ class Airspace(Scene3D):
         
 
     def create_uavs(self):
+        """Create the UAVs in the airspace, creates a grid of UAVs"""
         for i in range(self.N):
             for j in range(self.N):
                 model = models[(i+j)%len(models)]
@@ -793,6 +879,7 @@ class Airspace(Scene3D):
                 # uav.create_convex_hull()
     
     def create_colliding_uavs(self):
+        """Create 3 UAVs that are colliding"""
         model1= models[0]
         model2= models[1]
         filename1 = f"models/{model1}.obj"
@@ -802,6 +889,7 @@ class Airspace(Scene3D):
         uav3 = UAV(self, filename1, position=[1.5, 1, 1.0], scale=None)
 
     def create_random_uavs(self):
+        """Create random UAVs in the airspace"""
         for i in range(self.N):
             for j in range(self.N):
                 model = models[np.random.randint(0, len(models))]
@@ -813,17 +901,21 @@ class Airspace(Scene3D):
                 uav.rotate(rotation_angle, [0, 1, 0])
 
     def create_random_uavs_non_colliding(self):
+        """Create random UAVs in the airspace such that they dont collide"""
+
         def check_collision(p, positions):
+            """Check if the position p collides with any of the positions in the list positions (meaning it is within 2 units of any of the positions)"""
             for pos in positions:
                 if np.linalg.norm(np.array(p) - np.array(pos)) < 2:
                     return True
             return False
+        
         positions = []
         for i in range(self.N):
             for j in range(self.N):
                 
                 position = [np.random.uniform(-self.N, 3*self.N), 2, np.random.uniform(-self.N, 3*self.N)]
-                while check_collision(position, positions):
+                while check_collision(position, positions): # Make sure the UAVs dont collide
                     position = [np.random.uniform(-self.N, 3*self.N), 2, np.random.uniform(-self.N, 3*self.N)]
                 positions.append(position)
                 model = models[np.random.randint(0, len(models))]
@@ -836,6 +928,7 @@ class Airspace(Scene3D):
         self.find_collisions(show=False)
 
     def create_time_colliding_uavs(self):
+        """Create 2 UAVs that are not colliding, but their paths will collide in the first time step"""
         model1 = np.random.choice(models)
         model2 = np.random.choice(models)
         filename1 = f"models/{model1}.obj"
@@ -853,6 +946,12 @@ class Airspace(Scene3D):
         self.find_collisions_dt(self.dt, show=True)
 
     def create_taking_off_uavs(self, dome_radius:float = 15):
+        """Create UAVs that are taking off from the Landing Pad
+        Inputs:
+        - dome_radius: the radius of the dome around the UAVs
+        
+        Returns:
+        Nothing"""
 
         self.protocol = self.protocol_taking_off
 
@@ -902,6 +1001,9 @@ class Airspace(Scene3D):
                 self.addShape(self.beacons[uav.name], uav.name+"_beacon")
 
     def create_landing_uavs(self, dome_radius:float = 15):
+        """Create UAVs that are on the dome sphere and will be landing on the landing spots
+        Inputs:
+        - dome_radius: the radius of the dome around the UAVs"""
 
         self.protocol = self.protocol_landing
 
@@ -949,6 +1051,10 @@ class Airspace(Scene3D):
                 self.addShape(self.landing_spots[uav.name], uav.name+"_landing_spot")
 
     def create_landing_uavs_time(self, dome_radius:float = 15, flow:float = 0.5):
+        """Create UAVs that are on the dome sphere and will be landing on the landing spots, however not all are created now, they will be created over time
+        Inputs:
+        - dome_radius: the radius of the dome around the UAVs
+        - flow: the chance that a UAV will spawn at every frame (dt)"""
         self.protocol = self.protocol_landing
         self.method = "landing_time"
 
@@ -967,6 +1073,7 @@ class Airspace(Scene3D):
         
 
     def create_new_landing_uav(self):
+        """Create a new UAV that is inside the dome sphere and will be landing on the landing spots"""
 
         other_uavs = self.uavs.values()
 
@@ -1013,15 +1120,8 @@ class Airspace(Scene3D):
         self.landing_spots[new_uav.name] = Sphere3D(p=[2*i+1, 0.1, 2*j+1], radius=0.1, resolution=30, color = colors[(i+j)%len(colors)])
         self.addShape(self.landing_spots[new_uav.name], new_uav.name+"_landing_spot")
 
-
-
-
-
-        
-                
-        
-
     def find_collisions(self, show):
+        """Find the collisions between the UAVs in the airspace for a specific moment"""
 
         if show:
             geometry_names = self._shapeDict.keys()
@@ -1046,6 +1146,10 @@ class Airspace(Scene3D):
 
     
     def find_collisions_dt(self, dt:float, show:bool = False):
+        """Find the collisions between the UAVs in the airspace for a specific time step
+        Inputs:
+        - dt: the time step
+        - show: whether to show the collision boxes"""
 
         
 
@@ -1069,6 +1173,7 @@ class Airspace(Scene3D):
         
 
     def on_key_press(self, symbol, modifiers):
+        """Handle the key press events"""
 
         if symbol == Key.C:
             for uav in self.uavs.values():
@@ -1160,6 +1265,7 @@ class Airspace(Scene3D):
             self.updateShape(uav.mesh, uav.name)
 
     def on_idle(self):
+        """The method that is called at every frame"""
         if self.paused:
             return
         if time.time() - self.last_update < self.dt:
@@ -1190,10 +1296,12 @@ class Airspace(Scene3D):
         pass
 
     def protocol_avoidance(self, show = True):
+        """A protocol for the UAVs to avoid each other"""
         self.mode = "avoidance"
 
 
-        def find_best_direction(uav, other_positions, ):
+        def find_best_direction(uav, other_positions, ): 
+            """Find the best direction for the UAV to move in to avoid the other UAVs"""
             vectors = [other_pos-uav.position for other_pos in other_positions]
             vectors_normalized = [v/np.linalg.norm(v) for v in vectors if v.any()]
             sum_of_vectors = np.sum(vectors_normalized, axis=0)
@@ -1204,11 +1312,11 @@ class Airspace(Scene3D):
                 
             
         time1 = time.time()
-        collides = self.find_collisions_dt(self.dt, show=True)
+        collides = self.find_collisions_dt(self.dt, show=True) # Get the collision pairs
         if show_times:
             print(f"Time taken to find the collisions(1): {time.time()-time1:.2f}s")
         uavs = list(self.uavs.values())
-        for i,uav in enumerate(self.uavs.values()):
+        for i,uav in enumerate(self.uavs.values()): # For the UAVs that are colliding try to avoid the other UAVs
             if not i in collides:
                 continue
             if not collides[i]:
@@ -1218,18 +1326,20 @@ class Airspace(Scene3D):
             best_direction = find_best_direction(uav, other_positions)
             uav.speed = speed_constant*best_direction
         time2 = time.time()
-        collides = self.find_collisions_dt(self.dt, show=show)
+        collides = self.find_collisions_dt(self.dt, show=show) # Get the collision pairs again
         if show_times:
             print(f"Time taken to find the collisions(2): {time.time()-time2:.2f}s")
-        for i,uav in enumerate(self.uavs.values()):
+        for i,uav in enumerate(self.uavs.values()): # For the UAVs that are not colliding move them according to set speed
             if not i in collides or not collides[i]:
                 uav.move_by(uav.speed*self.dt)
                 
 
     def protocol_target_beacon(self, show = True):
+        """A protocol for the UAVs to reach the target beacon"""
         self.mode = "target_beacon"
 
         def find_best_direction(uav, other_positions, beacon_position):
+            """Find the best direction for the UAV to move in to avoid the other UAVs and reach the target beacon"""
 
             if uav.has_reached_beacon(self.beacons[uav.name], threshold=0.1):
                 return np.array([0, 0, 0])
@@ -1258,6 +1368,7 @@ class Airspace(Scene3D):
             return best_direction
 
         def find_target_direction(uav, beacon_position):
+            """Find the direction in which the UAV should move to reach the target beacon"""
             target_direction = beacon_position-uav.position
             if np.linalg.norm(target_direction) < 0.5:
                 return np.array([0, 0, 0])
@@ -1268,7 +1379,7 @@ class Airspace(Scene3D):
                 
             
         time1 = time.time()
-        collides = self.find_collisions_dt(self.dt, show=show)
+        collides = self.find_collisions_dt(self.dt, show=show) # Get the collision pairs
         if show_times:
             print(f"Time taken to find the collisions(1): {time.time()-time1:.2f}s")
         uavs = list(self.uavs.values())
@@ -1276,11 +1387,11 @@ class Airspace(Scene3D):
 
             beacon = self.beacons[uav.name]
             beacon_position = np.array([beacon.x, beacon.y, beacon.z])
-            if not collides[i]:
+            if not collides[i]: # If the UAV is not colliding with any other UAV then try to move it towards the target beacon
                 uav.speed = speed_constant*find_target_direction(uav, beacon_position)
                 continue
 
-            colliding = collides[i]
+            colliding = collides[i] # If the UAV is colliding with other UAVs then try to avoid the other UAVs and move towards the target beacon
             other_positions = [uavs[j].position for j in colliding]
             best_direction = find_best_direction(uav, other_positions, beacon_position=beacon_position)
             uav.speed = speed_constant*best_direction
@@ -1289,7 +1400,7 @@ class Airspace(Scene3D):
         collides = self.find_collisions_dt(self.dt, show=show)
         if show_times:
             print(f"Time taken to find the collisions(2): {time.time()-time2:.2f}s")
-        for i,uav in enumerate(self.uavs.values()):
+        for i,uav in enumerate(self.uavs.values()): # For the UAVs that are not colliding move them according to set speed
             if not i in collides or not collides[i]:
                 uav.number_of_stationary_frames = 0
                 uav.move_by(uav.speed*self.dt)
@@ -1297,8 +1408,12 @@ class Airspace(Scene3D):
                 uav.number_of_stationary_frames += 1
 
     def protocol_landing(self, show = True):
+        """A protocol for the UAVs to reach the landing spot"""
+
         self.mode = "landing"
+
         def find_best_direction(uav, other_positions, landing_spot_position):
+            """Find the best direction for the UAV to move in to avoid the other UAVs and reach the landing spot"""
 
             if uav.has_reached_landing_spot(self.landing_spots[uav.name], threshold=0.1):
                 return np.array([0, 0, 0])
@@ -1327,6 +1442,7 @@ class Airspace(Scene3D):
             return best_direction
 
         def find_target_direction(uav, landing_spot_position):
+            """Find the direction in which the UAV should move to reach the landing spot"""
             target_direction = landing_spot_position-uav.position
             if np.linalg.norm(target_direction) < 0.5:
                 return np.array([0, 0, 0])
@@ -1337,28 +1453,30 @@ class Airspace(Scene3D):
                 
             
         time1 = time.time()
-        collides = self.find_collisions_dt(self.dt, show=show)
+        collides = self.find_collisions_dt(self.dt, show=show) # Get the collision pairs
         if show_times:
             print(f"Time taken to find the collisions(1): {time.time()-time1:.2f}s")
         uavs = list(self.uavs.values())
+
         for i,uav in enumerate(self.uavs.values()):
 
             landing_spot = self.landing_spots[uav.name]
             landing_spot_position = np.array([landing_spot.x, landing_spot.y, landing_spot.z])
-            if not collides[i]:
+            if not collides[i]: # If the UAV is not colliding with any other UAV then try to move it towards the landing spot
                 uav.speed = speed_constant*find_target_direction(uav, landing_spot_position)
                 continue
 
-            colliding = collides[i]
+            colliding = collides[i] # If the UAV is colliding with other UAVs then try to avoid the other UAVs and move towards the landing spot
             other_positions = [uavs[j].position for j in colliding]
             best_direction = find_best_direction(uav, other_positions, landing_spot_position)
             uav.speed = speed_constant*best_direction
 
         time2 = time.time()
-        collides = self.find_collisions_dt(self.dt, show=show)
+        collides = self.find_collisions_dt(self.dt, show=show) # Check for collisions again
         if show_times:
             print(f"Time taken to find the collisions(2): {time.time()-time2:.2f}s")
-        for i,uav in enumerate(self.uavs.values()):
+
+        for i,uav in enumerate(self.uavs.values()): # For the UAVs that are not colliding move them according to set speed
             if not i in collides or not collides[i]:
                 uav.number_of_stationary_frames = 0
                 uav.move_by(uav.speed*self.dt)
