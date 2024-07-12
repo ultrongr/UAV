@@ -94,6 +94,7 @@ class UAV:
         if "Helicopter" in filename: # Correcting incorrect rotation of mesh to aline with direction
             self.direction = np.array([1, 0, 0])
         self.speed = 0.5*self.direction
+        self.number_of_stationary_frames = 0
         if position:            
             self.move_to(position)
         
@@ -565,7 +566,10 @@ class UAV:
                             if triangle1.collides_triangle(triangle2):
                                 return True
         return False
-        
+    
+    def has_reached_beacon(self, beacon, threshold:float = 0.1):
+        dist = np.linalg.norm(self.position - np.array([beacon.x, beacon.y, beacon.z]))
+        return dist < threshold
 
     def scale(self, scale:float = None, fit_to_unit_sphere:bool = False):
         """
@@ -824,6 +828,8 @@ class Airspace(Scene3D):
                 model = models[(i+j)%len(models)]
                 filename = f"models/{model}.obj"
                 uav = UAV(self, filename, position=[2*i+1, 1, 2*j+1], scale=None)
+                rotation_angle = np.random.uniform(0, 2*np.pi)
+                uav.rotate(rotation_angle, [0, 1, 0])
 
                 beacon_pos = random_point_on_upper_hemisphere(dome_radius, center)
                 while min_distance_from_beacons(self.beacons, beacon_pos) < 3:
@@ -977,7 +983,7 @@ class Airspace(Scene3D):
             print("new frame", time.time()-self.last_update)
         self.last_update = time.time()
         # self.protocol_avoidance()
-        self.protocol_target_beacon()
+        self.protocol_target_beacon(show=False)
         
         pass
 
@@ -1026,18 +1032,30 @@ class Airspace(Scene3D):
         # speeds = [uav.speed for uav in self.uavs.values()]
         # print(f"Speeds: {speeds}")
 
-    def protocol_target_beacon(self):
+    def protocol_target_beacon(self, show = True):
+
         def find_best_direction(uav, other_positions, beacon_position):
+
+            if uav.has_reached_beacon(self.beacons[uav.name], threshold=0.2):
+                return np.array([0, 0, 0])
             
             vectors = [other_pos-uav.position for other_pos in other_positions]
             vectors_normalized = [v/np.linalg.norm(v) for v in vectors if v.any()]
             sum_of_vectors = np.sum(vectors_normalized, axis=0)
-            sum_of_vectors = sum_of_vectors/np.linalg.norm(sum_of_vectors)
+            sum_of_vectors = sum_of_vectors
+            if np.allclose(sum_of_vectors, 0):
+                avoid_direction = np.array([0, 0, 0])
+            else:
+                sum_of_vectors = sum_of_vectors/np.linalg.norm(sum_of_vectors)
             avoid_direction = -sum_of_vectors
 
-            target_direction = beacon_position-uav.position
-            if np.linalg.norm(target_direction) < 0.5:
-                return np.array([0, 0, 0])
+            if uav.number_of_stationary_frames > 5: # To avoid getting stuck at the start
+                uav.move_by(avoid_direction*self.dt*0.1)
+            if uav.number_of_stationary_frames > 3: # To avoid getting stuck in general
+                return avoid_direction
+
+
+            target_direction = beacon_position-uav.position            
             target_direction = target_direction/np.linalg.norm(target_direction)
 
             best_direction = target_direction + avoid_direction
@@ -1055,30 +1073,33 @@ class Airspace(Scene3D):
                 
             
         time1 = time.time()
-        collides = self.find_collisions_dt(self.dt, show=True)
+        collides = self.find_collisions_dt(self.dt, show=show)
         if show_times:
             print(f"Time taken to find the collisions(1): {time.time()-time1:.2f}s")
         uavs = list(self.uavs.values())
         for i,uav in enumerate(self.uavs.values()):
 
-            if not collides[i]:
-                beacon = self.beacons[uav.name]
-                beacon_position = np.array([beacon.x, beacon.y, beacon.z])
-                uav.speed = speed_constant*find_target_direction(uav, beacon_position)
-                continue
-            colliding = collides[i]
-            other_positions = [uavs[j].position for j in colliding]
             beacon = self.beacons[uav.name]
             beacon_position = np.array([beacon.x, beacon.y, beacon.z])
+            if not collides[i]:
+                uav.speed = speed_constant*find_target_direction(uav, beacon_position)
+                continue
+
+            colliding = collides[i]
+            other_positions = [uavs[j].position for j in colliding]
             best_direction = find_best_direction(uav, other_positions, beacon_position=beacon_position)
             uav.speed = speed_constant*best_direction
+
         time2 = time.time()
-        collides = self.find_collisions_dt(self.dt, show=False)
+        collides = self.find_collisions_dt(self.dt, show=show)
         if show_times:
             print(f"Time taken to find the collisions(2): {time.time()-time2:.2f}s")
         for i,uav in enumerate(self.uavs.values()):
             if not i in collides or not collides[i]:
+                uav.number_of_stationary_frames = 0
                 uav.move_by(uav.speed*self.dt)
+            else:
+                uav.number_of_stationary_frames += 1
 
     # def protocol_avoidance(self):
         
