@@ -38,7 +38,7 @@ models = ["v22_osprey",
     ]
 show_times = False
 kdop_number = 14
-speed_constant = 1
+speed_constant = 1.3
 np.random.seed(123456)
 # np.random.seed(12345)
 # np.random.seed(1234)
@@ -1305,7 +1305,7 @@ class Airspace(Scene3D):
             print("new frame", time.time()-self.last_update)
         self.last_update = time.time()
 
-        if self.method == "landing_time":
+        if hasattr(self, "method") and self.method == "landing_time":
             if len(self.uavs.values())<self.N*self.N:
                 if np.random.rand()<self.new_uavs_flow:
                     self.create_new_landing_uav()
@@ -1402,7 +1402,7 @@ class Airspace(Scene3D):
         def find_target_direction(uav, beacon_position):
             """Find the direction in which the UAV should move to reach the target beacon"""
             target_direction = beacon_position-uav.position
-            if np.linalg.norm(target_direction) < 0.5:
+            if np.linalg.norm(target_direction) < 0.2:
                 return np.array([0, 0, 0])
             target_direction = target_direction/np.linalg.norm(target_direction)
             return target_direction
@@ -1844,14 +1844,14 @@ def main():
 
 
     
-    airspace = Airspace(1920, 1080, N = 5, dt=0.2)
+    airspace = Airspace(1920, 1080, N = 5, dt=0.15)
 
     # airspace.create_random_uavs()
     # airspace.create_random_uavs_non_colliding()
     # airspace.create_time_colliding_uavs()
     # airspace.create_taking_off_uavs(dome_radius=15)
-    # airspace.create_landing_uavs(dome_radius=15)
-    airspace.create_landing_uavs_time(dome_radius=15, flow=0.5)
+    airspace.create_landing_uavs(dome_radius=15)
+    # airspace.create_landing_uavs_time(dome_radius=15, flow=0.5)
 
 
 
