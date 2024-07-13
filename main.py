@@ -133,14 +133,16 @@ class UAV:
 
                 
         
-    def move_to(self, new_position:np.ndarray|list):
+    def move_to(self, new_position:np.ndarray|list, update = True):
         "Move the UAV to the specified position"
         new_position = np.array(new_position)
         self.position=np.array(self.position)
         dist = new_position - self.position
         self.mesh.vertices += dist
         self.position = new_position
-        self.mesh._update(self.name, self.scene)
+        if  update:
+           
+            self.mesh._update(self.name, self.scene)
 
         for box_name in self.boxes.keys(): # Move all the boxes as well
             if not self.boxes.get(box_name):
@@ -150,31 +152,31 @@ class UAV:
             if box_name == "kdop":
                 
                 box.move_by(dist)
-                if self.boxes_visibility[box_name]:
+                if self.boxes_visibility[box_name] and update:
                     self.remove_kdop()
                     self.create_kdop(kdop_number)
             
             elif box_name == "aabb":
                 box.translate(dist)
-                if self.boxes_visibility[box_name]:
+                if self.boxes_visibility[box_name] and update:
                     self.remove_aabb()
                     self.create_aabb()
             
             elif box_name == "chull":
                 for vertex in box._shape.vertices:
                     vertex += dist
-                if self.boxes_visibility[box_name]:
+                if self.boxes_visibility[box_name] and update:
                     self.remove_convex_hull()
                     self.create_convex_hull()
             
-            elif box_name == "aabb_node":
+            elif box_name == "aabb_node" and update:
                 self.boxes["aabb_node"] = None
 
                     
     
-    def move_by(self, dist:np.ndarray):
+    def move_by(self, dist:np.ndarray, update = True):
         "Move the UAV by the specified distance"
-        self.move_to(self.position + dist)
+        self.move_to(self.position + dist, update = update)
 
     def rotate(self, angle:float, axis:np.ndarray):
         "Rotate the UAV by the speciied angle around the specified axis"
@@ -237,8 +239,9 @@ class UAV:
         # Define what method you want to use after the kdop continuous has detected collision:
         # Possible choices: None, collides_aabb_node, collides_aabb, Collides_kdop, collides_convex_hull, collides_mesh_random, collides_mesh
         # extra_method = self.collides_aabb_node # Quite slower but more accurate
-        extra_method = None # No extra method, makes it way faster
-        number_of_extra_checks = 2
+        # extra_method = None # No extra method, makes it way faster
+        extra_method = self.collides_convex_hull_trimesh # Quite fast and accurate
+        number_of_extra_checks = 2 # Number of extra checks in smaller time steps
 
         def get_continuous_kdop(uav: "UAV", dt:float): # Create a continuous kdop for the UAV, which is the chull of the kdop of the initial and final position
             
@@ -294,17 +297,24 @@ class UAV:
         if check_mesh_collision_trimesh(continuous1._shape, continuous2._shape):
 
             if extra_method: # Check for collision in smaller time steps, only checks for discrete times
-                other_position = other.position
-                self_position = self.position
+                other_position = np.array(other.position)
+                self_position = np.array(self.position)
                 self_dx = self.speed*dt/number_of_extra_checks
                 other_dx = other.speed*dt/number_of_extra_checks
                 for i in range(1, number_of_extra_checks+1):
-                    self.move_by(self_dx)
-                    other.move_by(other_dx)
+                    self.move_by(self_dx, update = False)
+                    other.move_by(other_dx, update = False)
                     if extra_method(other, show=show):
                         return True
-                self.move_to(self_position)
-                other.move_to(other_position)
+                self.move_to(self_position, update = True)
+                other.move_to(other_position, update = True)
+                # Also need to move back the boxes
+                vertexes = continuous1._shape.vertices
+                vertexes -= self_dx
+                continuous1.vertices = vertexes
+                vertexes = continuous2._shape.vertices
+                vertexes -= other_dx
+                continuous2.vertices = vertexes
                     
 
             if show:
@@ -1014,13 +1024,13 @@ class Airspace(Scene3D):
         model2 = np.random.choice(models)
         filename1 = f"models/{model1}.obj"
         filename2 = f"models/{model2}.obj"
-        uav1 = UAV(self, filename1, position=[2, 1, 2], scale=None)
+        uav1 = UAV(self, filename1, position=[2, 1, 0], scale=None)
         uav2 = UAV(self, filename2, position=[0, 1, 0], scale=None)
 
         uav1.rotate(-np.pi/2, [0, 1, 0])
 
-        # speed = 1.1 # Not colliding
-        speed = 1.5 # Colliding
+        speed = 8 # Not colliding
+        # speed = 10 # Colliding
         uav1.speed = np.array(speed*uav1.direction)
         uav2.speed = np.array(speed*uav2.direction)
 
