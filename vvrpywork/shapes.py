@@ -3405,7 +3405,7 @@ class AabbNode:
             if len(points) == 0:
                 self.children.append(None)
             else:
-                self.children.append(AabbNode(np.array(points), depth=self.depth+1))
+                self.children.append(AabbNode(np.array(points), depth=self.depth+1, uav_name=self.uav_name))
 
 
         

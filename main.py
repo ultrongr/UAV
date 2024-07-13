@@ -330,17 +330,16 @@ class UAV:
         if get_question()==3:
             hierarchy = [
                 self.collides_aabb,
-                self.collides_aabb_node,
+                self.collides_convex_hull,
                 self.collides_kdop,
-                # self.collides_convex_hull_trimesh,
-                # self.collides_kdop_trimesh,
+                # self.collides_convex_hull,
             ]
         
         elif get_question()==4:
             hierarchy = [
                 self.collides_aabb,
-                self.collides_aabb_node,
                 self.collides_kdop_trimesh,
+                self.collides_aabb_node,
                 self.collides_mesh_trimesh,
             ]
 
@@ -837,7 +836,7 @@ class UAV:
         if self.boxes["aabb_node"]:
             return
 
-        aabb_node = AabbNode(self.mesh.vertices, max_depth = 4)
+        aabb_node = AabbNode(self.mesh.vertices, max_depth = 4, uav_name=self.name)
         self.boxes["aabb_node"] = aabb_node
 
     def create_convex_hull(self):
