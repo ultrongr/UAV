@@ -63,7 +63,7 @@ models = ["v22_osprey",
         "twin_copter",
         "F52",
         "Helicopter",
-        # "quadcopter_scifi",
+        # "quadcopter_scifi", ## Huge amount of vertices makes moving it time consuming
         
         # "fight_drone", ## small kdop issue
         # "B2_Spirit", ## small kdop issue
