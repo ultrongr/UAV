@@ -1025,16 +1025,16 @@ class Airspace(Scene3D):
         model2 = np.random.choice(models)
         filename1 = f"models/{model1}.obj"
         filename2 = f"models/{model2}.obj"
-        uav1 = UAV(self, filename1, position=[2, 1, 0], scale=None)
+        uav1 = UAV(self, filename1, position=[4, 1, 0], scale=None)
         uav2 = UAV(self, filename2, position=[0, 1, 0], scale=None)
 
         uav1.rotate(-np.pi/2, [0, 1, 0])
 
-        speed = 8 # Not colliding
-        # speed = 10 # Colliding
+        # speed = 9 # Not colliding
+        speed = 30 # Colliding
         uav1.speed = np.array(speed*uav1.direction)
         uav2.speed = np.array(speed*uav2.direction)
-
+        # print("Collision check:", self.find_collisions_dt(self.dt, show=True))
         self.find_collisions_dt(self.dt, show=True)
 
     def create_taking_off_uavs(self, dome_radius:float = 15):
@@ -1264,6 +1264,9 @@ class Airspace(Scene3D):
             for j, uav2 in enumerate(self.uavs.values()):
                 if i == j:
                     continue
+                if colliding.get(j) and i in colliding[j]:
+                    colliding[i].add(j)
+                    continue
                 if np.linalg.norm(uav1.position - uav2.position) < self.closest_distance_between_uavs:
                     self.closest_distance_between_uavs = np.linalg.norm(uav1.position - uav2.position)
                 if uav1.collides_dt(uav2, dt, show=show):
@@ -1386,7 +1389,7 @@ class Airspace(Scene3D):
             print("new frame", time.time()-self.last_update)
         self.last_update = time.time()
 
-        if hasattr(self, "method") and self.method == "landing_time":
+        if hasattr(self, "method") and self.method == "landing_time": # If the method is landing_time, then new UAVs are added over time
             if len(self.uavs.values())<self.N*self.N:
                 if np.random.rand()<self.new_uavs_flow:
                     self.create_new_landing_uav()
@@ -1397,6 +1400,7 @@ class Airspace(Scene3D):
         # self.protocol_landing(show=False)
         if not self.protocol:
             print("No protocol set")
+            self.protocol = self.protocol_avoidance
             self.protocol_avoidance()
         else:
             self.protocol(show=False)
@@ -1933,7 +1937,11 @@ def main():
     for i, info in enumerate(config_info.values()):
         print(f"{i}. {info}")
     
-    choice = int(input("Enter the choice (1-8, default is 8): "))
+    choice = input("Enter the choice (1-8, default is 8): ")
+    try:
+        choice = int(choice)
+    except:
+        choice = 8
     while int(choice) not in range(9):
         if not choice:
             choice = 8
@@ -1961,7 +1969,7 @@ def main():
     if get_question() < 6:
         delattr(Airspace, "on_idle")
     
-    airspace = Airspace(1920, 1080, N = 5, dt=0.15)
+    airspace = Airspace(1920, 1080, N = 5, dt=dt)
 
     if get_question() == 1: #Random UAVs
         airspace.create_random_uavs()
