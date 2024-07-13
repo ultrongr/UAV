@@ -239,8 +239,8 @@ class UAV:
         # Define what method you want to use after the kdop continuous has detected collision:
         # Possible choices: None, collides_aabb_node, collides_aabb, Collides_kdop, collides_convex_hull, collides_mesh_random, collides_mesh
         # extra_method = self.collides_aabb_node # Quite slower but more accurate
-        # extra_method = None # No extra method, makes it way faster
-        extra_method = self.collides_convex_hull_trimesh # Quite fast and accurate
+        extra_method = None # No extra method, makes it way faster
+        extra_method = self.collides_aabb # Quite fast and accurate
         number_of_extra_checks = 2 # Number of extra checks in smaller time steps
 
         def get_continuous_kdop(uav: "UAV", dt:float): # Create a continuous kdop for the UAV, which is the chull of the kdop of the initial and final position
@@ -278,8 +278,8 @@ class UAV:
             self.scene.removeShape(other.name+self.name+"_continuous")
 
 
-        if np.linalg.norm(self.position - other.position)>3: # Dont bother with very distant UAVs
-            if np.linalg.norm(self.position+dt*self.speed - other.position-dt*other.speed)>3:
+        if np.linalg.norm(self.position - other.position)>2: # Dont bother with very distant UAVs
+            if np.linalg.norm(self.position+dt*self.speed - other.position-dt*other.speed)>2:
 
                 return False
         
@@ -294,9 +294,11 @@ class UAV:
         continuous2 = other.boxes["continuous"]
 
 
-        if check_mesh_collision_trimesh(continuous1._shape, continuous2._shape):
 
+        if check_mesh_collision_trimesh(continuous1._shape, continuous2._shape):
             if extra_method: # Check for collision in smaller time steps, only checks for discrete times
+
+                output = False
                 other_position = np.array(other.position)
                 self_position = np.array(self.position)
                 self_dx = self.speed*dt/number_of_extra_checks
@@ -304,25 +306,24 @@ class UAV:
                 for i in range(1, number_of_extra_checks+1):
                     self.move_by(self_dx, update = False)
                     other.move_by(other_dx, update = False)
-                    if extra_method(other, show=show):
-                        return True
-                self.move_to(self_position, update = True)
-                other.move_to(other_position, update = True)
-                # Also need to move back the boxes
-                vertexes = continuous1._shape.vertices
-                vertexes -= self_dx
-                continuous1.vertices = vertexes
-                vertexes = continuous2._shape.vertices
-                vertexes -= other_dx
-                continuous2.vertices = vertexes
-                    
+                    if extra_method(other, show=False):
+                        output = True
+                        break
+                self.move_to(self_position, update = False)
+                other.move_to(other_position, update = False)
+                
 
-            if show:
+            if extra_method:
+                if output and show:
+                    self.scene.addShape(continuous1, self.name+other.name+"_continuous")
+                    self.scene.addShape(continuous2, other.name+self.name+"_continuous")
+                return output
+            else:
+                if show:
+                    self.scene.addShape(continuous1, self.name+other.name+"_continuous")
+                    self.scene.addShape(continuous2, other.name+self.name+"_continuous")
+                return True               
 
-                self.scene.addShape(continuous1, self.name+other.name+"_continuous")
-                self.scene.addShape(continuous2, other.name+self.name+"_continuous")
-            return True
-        
 
 
     def collides(self, other: "UAV", show:bool = False):
