@@ -349,7 +349,6 @@ class UAV:
                 self.collides_aabb_node,
                 # self.collides_kdop_trimesh,
                 self.collides_mesh_trimesh,
-                self.collides_kdop,
             ]
 
         if not hierarchy:
