@@ -25,6 +25,39 @@ unlitLine.shader = "unlitLine"
 unlitLine.line_width = 5
 
 
+config={
+    "Q1": False,
+    "Q2": False,
+    "Q3": False,
+    "Q4": False,
+    "Q5": False,
+    "Q6": False,
+    "Q7": False,
+    "Q8": False,
+    "Q9": True,
+}
+
+def get_question():
+    for key in config:
+        if config[key]:
+            return int(key[-1])
+
+config_info={
+    "Q1": "Load 3D UAV models and visualize them in random positions",
+    "Q2": "For every model, visualize the axis-aligned bounding box (AABB), convex hull and k-DOP",
+    "Q3": "Check for collisions between UAVs using bounding volumes (AABB, convex hull, k-DOP)",
+    "Q4": "Check for collisions between UAVs using a more precise method (AABB node) and a most precise method (mesh collision check)",
+    "Q5": "Randomize the position and the orientation of the UAVs and check for collisions",
+    "Q6": "Assume dt, as the time step, and create a bounding volume that represents the positions of the UAVs during the time step and visualize collisions",
+    "Q7": "Check for collisions between UAVs and create a protocol that avoids them",
+    "Q8": "Implement a protocol for take off and one for landing with the number of drones, their appearance, position and speed, random",
+    "Q9": "Visualize the simulation and show interesting statistics",
+
+
+
+
+}
+
 
 models = ["v22_osprey",
         "twin_copter",
@@ -87,6 +120,7 @@ class UAV:
             self.direction = np.array([1, 0, 0])
         self.speed = 0.5*self.direction
         self.number_of_stationary_frames = 0
+        position = np.array(position)
         if position.any():            
             self.move_to(position)
         
@@ -292,22 +326,47 @@ class UAV:
         
         Returns:
         - True if the UAVs collide, False otherwise"""
+        hierarchy = None
+        if get_question()==3:
+            hierarchy = [
+                self.collides_aabb,
+                self.collides_aabb_node,
+                self.collides_kdop,
+                # self.collides_convex_hull_trimesh,
+                # self.collides_kdop_trimesh,
+            ]
         
+        elif get_question()==4:
+            hierarchy = [
+                self.collides_aabb,
+                self.collides_aabb_node,
+                self.collides_kdop_trimesh,
+                self.collides_mesh_trimesh,
+            ]
 
+        elif get_question()==5:
+            hierarchy = [
+                self.collides_aabb,
+                self.collides_aabb_node,
+                # self.collides_kdop_trimesh,
+                self.collides_mesh_trimesh,
+                self.collides_kdop,
+            ]
 
-        hierarchy = [
-            self.collides_aabb,
-            self.collides_aabb_node,
-            self.collides_kdop_trimesh,
-            self.collides_kdop,        
-            # self.collides_convex_hull_trimesh,    
-            # self.collides_convex_hull,
-            # self.collides_mesh_random,
-            # self.collides_mesh_trimesh,
-            # self.collides_mesh,
-        ]
+        if not hierarchy:
+            hierarchy = [
+                self.collides_aabb,
+                # self.collides_aabb_node,
+                self.collides_kdop_trimesh,
+                # self.collides_kdop,        
+                # self.collides_convex_hull_trimesh,    
+                # self.collides_convex_hull,
+                # self.collides_mesh_random,
+                # self.collides_mesh_trimesh,
+                # self.collides_mesh,
+            ]
         for i, method in enumerate(hierarchy):
-            is_last = (i==len(hierarchy)-1) 
+            is_last = (i==len(hierarchy)-1) # Only the last method will show the collision boxes
             if method(other, show= (show and is_last)):
                 continue
             else:
@@ -501,13 +560,25 @@ class UAV:
         
         Returns:
         - True if the UAVs collide, False otherwise"""
+
+        if show:
+            self.scene.removeShape(self.name+other.name+"_collision")
+            self.scene.removeShape(other.name+self.name+"_collision")
+
         dist = np.linalg.norm(self.position - other.position)
         if dist>2:
             return False
         mesh1 = self.mesh
         mesh2 = other.mesh
 
-        return check_mesh_collision_trimesh(mesh1, mesh2)
+        if check_mesh_collision_trimesh(mesh1, mesh2):
+            if show:
+                sphere = Sphere3D(p=np.mean(mesh1.vertices, axis=0), radius=0.3, resolution=20, color=Color.BLUE)
+                self.scene.addShape(sphere, self.name+other.name+"_collision")
+                sphere = Sphere3D(p=np.mean(mesh2.vertices, axis=0), radius=0.3, resolution=20, color=Color.BLUE)
+                self.scene.addShape(sphere, other.name+self.name+"_collision")
+                
+            return True
     
 
     def collides_convex_hull(self, other: "UAV", show:bool = False):
@@ -964,7 +1035,7 @@ class Airspace(Scene3D):
         Returns:
         Nothing"""
         time1 = time.time()
-        self.protocol = self.protocol_taking_off
+        self.protocol = self.protocol_target_beacon
 
         def random_point_on_upper_hemisphere(radius=15, center=[0, 0, 0]):
             # Generate random angles
@@ -1325,6 +1396,7 @@ class Airspace(Scene3D):
     def protocol_avoidance(self, show = True):
         """A protocol for the UAVs to avoid each other"""
         self.mode = "avoidance"
+        self.protocol = self.protocol_avoidance
 
 
         def find_best_direction(uav, other_positions, ): 
@@ -1364,16 +1436,17 @@ class Airspace(Scene3D):
                 # uav.speed = np.array([0, 0, 0])
                 uav.number_of_stationary_frames += 1
                 self.number_of_uav_frames_without_speed += 1
-        self.time_stpent_moving_uavs += time.time()-time1
+        self.time_spent_moving_uavs += time.time()-time1
 
     def protocol_target_beacon(self, show = True):
         """A protocol for the UAVs to reach the target beacon"""
         self.mode = "target_beacon"
+        self.protocol = self.protocol_target_beacon
 
         def find_best_direction(uav, other_positions, beacon_position):
             """Find the best direction for the UAV to move in to avoid the other UAVs and reach the target beacon"""
 
-            if uav.has_reached_beacon(self.beacons[uav.name], threshold=0.1):
+            if uav.has_reached_beacon(self.beacons[uav.name], threshold=0.15):
                 return np.array([0, 0, 0])
             
             vectors = [other_pos-uav.position for other_pos in other_positions]
@@ -1402,7 +1475,7 @@ class Airspace(Scene3D):
         def find_target_direction(uav, beacon_position):
             """Find the direction in which the UAV should move to reach the target beacon"""
             target_direction = beacon_position-uav.position
-            if np.linalg.norm(target_direction) < 0.2:
+            if np.linalg.norm(target_direction) < 0.15:
                 return np.array([0, 0, 0])
             target_direction = target_direction/np.linalg.norm(target_direction)
             return target_direction
@@ -1442,15 +1515,19 @@ class Airspace(Scene3D):
                 self.number_of_uav_frames_without_speed += 1
         self.time_spent_moving_uavs += time.time()-time1
 
+
+                
+
     def protocol_landing(self, show = True):
         """A protocol for the UAVs to reach the landing spot"""
 
         self.mode = "landing"
+        self.protocol = self.protocol_landing
 
         def find_best_direction(uav, other_positions, landing_spot_position):
             """Find the best direction for the UAV to move in to avoid the other UAVs and reach the landing spot"""
 
-            if uav.has_reached_landing_spot(self.landing_spots[uav.name], threshold=0.1):
+            if uav.has_reached_landing_spot(self.landing_spots[uav.name], threshold=0.15):
                 return np.array([0, 0, 0])
             
             vectors = [other_pos-uav.position for other_pos in other_positions]
@@ -1479,7 +1556,7 @@ class Airspace(Scene3D):
         def find_target_direction(uav, landing_spot_position):
             """Find the direction in which the UAV should move to reach the landing spot"""
             target_direction = landing_spot_position-uav.position
-            if np.linalg.norm(target_direction) < 0.1:
+            if np.linalg.norm(target_direction) < 0.15:
                 return np.array([0, 0, 0])
             target_direction = target_direction/np.linalg.norm(target_direction)
             return target_direction
@@ -1523,19 +1600,19 @@ class Airspace(Scene3D):
     def simulation_has_ended(self):
         if self.mode == "landing":
             for uav in self.uavs.values():
-                if not uav.has_reached_landing_spot(self.landing_spots[uav.name], threshold=0.1):
+                if not uav.has_reached_landing_spot(self.landing_spots[uav.name], threshold=0.15):
                     return False
             return True
         if self.mode == "target_beacon":
             for uav in self.uavs.values():
-                if not uav.has_reached_beacon(self.beacons[uav.name], threshold=0.1):
+                if not uav.has_reached_beacon(self.beacons[uav.name], threshold=0.15):
                     return False
             return True
         if self.mode == "landing_time":
             if len(self.uavs.values()<self.N*self.N):
                 return False
             for uav in self.uavs.values():
-                if not uav.has_reached_landing_spot(self.beacons[uav.name], threshold=0.1):
+                if not uav.has_reached_landing_spot(self.beacons[uav.name], threshold=0.15):
                     return False
             return True
 
@@ -1842,16 +1919,99 @@ def check_mesh_collision_trimesh(mesh1, mesh2):
 
 def main():
 
+    print("Select the question number to run (Q9 will run in any suitable case):")
+    for i, info in enumerate(config_info.values()):
+        print(f"{i}. {info}")
+    
+    choice = int(input("Enter the choice (1-8, default is 8): "))
+    while int(choice) not in range(9):
+        if not choice:
+            choice = 8
+            break
+        choice = int(input("Not an acceptable choice. Enter the choice (1-8, default is 8): "))
+    config[f"Q{choice}"] = True
 
+    N_2 = input("Enter the number of UAVs (default is 25) (must be a square number): ")
+    try:
+        if np.sqrt(int(N_2))%1 != 0:
+            N_2 = 25
+    except ValueError:
+        N_2 = 25
+    N = int(np.sqrt(int(N_2)))
+
+    dt = 0.15
+    if get_question()>=6:
+        try:
+            dt  = float(input("Enter the time step (default is 0.15, close to 0.15 is recommended): "))
+        except:
+            dt = 0.15
+    
+    
+    
+    if get_question() < 6:
+        delattr(Airspace, "on_idle")
     
     airspace = Airspace(1920, 1080, N = 5, dt=0.15)
 
-    # airspace.create_random_uavs()
-    # airspace.create_random_uavs_non_colliding()
-    # airspace.create_time_colliding_uavs()
-    # airspace.create_taking_off_uavs(dome_radius=15)
-    airspace.create_landing_uavs(dome_radius=15)
-    # airspace.create_landing_uavs_time(dome_radius=15, flow=0.5)
+    if get_question() == 1: #Random UAVs
+        airspace.create_random_uavs()
+    if get_question() == 2: # Uavs on the landing spot for better visualization of bounding boxes
+        airspace.create_uavs()
+        print("""Show bounding boxes: K(Kdop), U(Sphere), B(AABB), C(Convex hull)""")
+    if get_question() == 3:
+        airspace.create_random_uavs()
+        airspace.find_collisions(show=True)
+        print("Find collisions any time by pressing L")
+    if get_question() == 4:
+        airspace.create_random_uavs()
+        airspace.find_collisions(show=True)
+        print("Find collisions any time by pressing L")
+    if get_question() == 5:
+        airspace.create_random_uavs()
+        airspace.find_collisions(show=True)
+        print("Find collisions any time by pressing L")
+
+    if get_question() == 6:
+        airspace.create_random_uavs_non_colliding()
+        airspace.protocol_avoidance(show=True)
+        print("Press P to pause/unpause")
+    if get_question() == 7:
+        airspace.create_random_uavs_non_colliding()
+        airspace.avoidance(show=False)
+        print("Press P to pause/unpause")
+    if get_question() == 8:
+        print("Possible protocols for Q8:")
+        print("1. Target beacon (UAVs take off and reach the target beacon)")
+        print("2. Landing (UAVs start from their beacons and land on the landing spots)")
+        print("3. Landing time (UAVs start from their beacons and land on the landing spots, new UAVs are added during the simulation in random positions)")
+        choice = input("Select the protocol to run (1-3, default is 3): ")
+        while int(choice) not in range(1, 4):
+            if not choice:
+                choice = 3
+                break
+            choice = input("Not an acceptable choice. Select the protocol to run (1-3, default is 3): ")
+        if int(choice) == 1:
+            airspace.create_taking_off_uavs()
+            airspace.protocol_target_beacon(show=False)
+        if int(choice) == 2:
+            airspace.create_landing_uavs()
+            airspace.protocol_landing(show=False)
+        if int(choice) == 3:
+            flow = 0.5
+            if get_question() == 8:
+                try:
+                    flow = float(input("Enter the flow of new UAVs (default is 0.5, close to 0.5 is recommended): "))
+                except:
+                    flow = 0.5
+            airspace.create_landing_uavs_time(flow = flow)
+            airspace.protocol_landing(show=False)
+        print("Press P to pause/unpause")
+
+
+    
+
+
+    
 
 
 
