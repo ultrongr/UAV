@@ -352,7 +352,7 @@ class UAV:
                 self.collides_kdop,
             ]
 
-        if not hierarchy:
+        if not hierarchy: # Used for the later questions, emphasises on speed
             hierarchy = [
                 self.collides_aabb,
                 # self.collides_aabb_node,
