@@ -69,6 +69,9 @@ This project simulates UAVs in a 3D environment and provides tools for creating 
 
     - **Create and show the Kdop for the UAVs**
         - Press `K` to create and show or hide the Kdop for all UAVs (14Dop unless changed to 6).
+    
+    - **Pause and Resume the Simulation**
+        - Press `P` to pause and resume the simulation. It is important to pause the simulation before interacting with the environment.
 
     - **Detect and show the Collisions in the Airspace**
         - Press `L` to find momentary collisions in the airspace using the collision detection hierarchy defined in UAV.collides(). The first time this is used, the necessary bounding volumes will be generated but not shown (unless already visible).
