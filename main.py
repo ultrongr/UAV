@@ -275,9 +275,9 @@ class UAV:
         
 
 
-
-        self.scene.removeShape(self.name+other.name+"_continuous")
-        self.scene.removeShape(other.name+self.name+"_continuous")
+        if show:
+            self.scene.removeShape(self.name+other.name+"_continuous")
+            self.scene.removeShape(other.name+self.name+"_continuous")
 
 
         if np.linalg.norm(self.position - other.position)>2: # Dont bother with very distant UAVs
@@ -1502,7 +1502,7 @@ class Airspace(Scene3D):
             best_direction = find_best_direction(uav, other_positions)
             uav.speed = speed_constant*best_direction
         time2 = time.time()
-        collides = self.find_collisions_dt(self.dt, show=show) # Get the collision pairs again
+        collides = self.find_collisions_dt(self.dt, show=False) # Get the collision pairs again
         if show_times:
             print(f"Time taken to find the collisions(2): {time.time()-time2:.2f}s")
         time1 = time.time()
@@ -1579,7 +1579,7 @@ class Airspace(Scene3D):
             uav.speed = speed_constant*best_direction
 
         time2 = time.time()
-        collides = self.find_collisions_dt(self.dt, show=show)
+        collides = self.find_collisions_dt(self.dt, show=False)
         if show_times:
             print(f"Time taken to find the collisions(2): {time.time()-time2:.2f}s")
         time1 = time.time()
@@ -1659,7 +1659,7 @@ class Airspace(Scene3D):
             uav.speed = speed_constant*best_direction
 
         time2 = time.time()
-        collides = self.find_collisions_dt(self.dt, show=show) # Check for collisions again
+        collides = self.find_collisions_dt(self.dt, show=False) # Check for collisions again
         if show_times:
             print(f"Time taken to find the collisions(2): {time.time()-time2:.2f}s")
         time1 = time.time()
@@ -1736,7 +1736,7 @@ class Airspace(Scene3D):
             uav.speed = speed_constant*best_direction
 
         time2 = time.time()
-        collides = self.find_collisions_dt(self.dt, show=show) # Check for collisions again
+        collides = self.find_collisions_dt(self.dt, show=False) # Check for collisions again
         if show_times:
             print(f"Time taken to find the collisions(2): {time.time()-time2:.2f}s")
         time1 = time.time()
@@ -2130,6 +2130,7 @@ def main():
 
     if get_question() == 6:
         airspace.create_random_uavs_non_colliding()
+        airspace.show_time_collisions = True
         airspace.protocol_avoidance(show=True)
         print("Press P to pause/unpause")
     if get_question() == 7:
