@@ -276,9 +276,9 @@ class UAV:
         
 
 
-        if show:
-            self.scene.removeShape(self.name+other.name+"_continuous")
-            self.scene.removeShape(other.name+self.name+"_continuous")
+
+        self.scene.removeShape(self.name+other.name+"_continuous")
+        self.scene.removeShape(other.name+self.name+"_continuous")
 
 
         if np.linalg.norm(self.position - other.position)>2: # Dont bother with very distant UAVs
@@ -967,6 +967,7 @@ class Airspace(Scene3D):
         self.time_spent_adding_uavs = 0
 
         self.simulation_end = False
+        self.show_time_collisions = False
 
         
 
@@ -1389,12 +1390,13 @@ class Airspace(Scene3D):
                 print("Unpaused")
         
         if symbol == Key.T:
-            to_be_removed = []
-            for name in self._shapeDict.keys():
-                if "continuous" in name:
-                    to_be_removed.append(name)
-            for name in to_be_removed:
-                self.removeShape(name)
+            self.show_time_collisions = not self.show_time_collisions
+            if self.show_time_collisions:
+                print("Showing time collisions")
+            else:
+                print("Not showing time collisions")
+        
+
 
         osprey:UAV = self.uavs.get("v22_osprey_0")
         if not osprey:
@@ -1458,15 +1460,13 @@ class Airspace(Scene3D):
                         self.create_new_taking_off_uav()
 
 
-        # self.protocol_avoidance()
-        # self.protocol_target_beacon(show=False)
-        # self.protocol_landing(show=False)
+
         if not self.protocol:
             print("No protocol set")
             self.protocol = self.protocol_avoidance
             self.protocol_avoidance()
         else:
-            self.protocol(show=False)
+            self.protocol(show=self.show_time_collisions)
         
         pass
 

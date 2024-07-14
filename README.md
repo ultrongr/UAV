@@ -49,11 +49,12 @@ This project simulates UAVs in a 3D environment and provides tools for creating 
    ```bash
    python main.py
    ```
-    The project should open a window.
-    After loading the UAVs it should display the 3D environment with the UAVs.
+    After you run the project, there will be several questions asked in the terminal, regarding the question number you want to run, as well as several other parameters. The default values are set to the values used in the report. You can change them if you want to test different scenarios.
+    After you answer the questions, the project will run and display the 3D environment with the UAVs.
+    
 
-    By default, the times for collision detection and kdop generation are printed to the console. 
-    This above  behaviour can be changed via setting `show_times = False`.
+    By default, the times for collision detection, kdop generation and decision making are not printed to the console. 
+    This above  behaviour can be changed via setting the global variable `show_times = True`.
 
 2. **Interact with the Environment**
 
@@ -70,8 +71,11 @@ This project simulates UAVs in a 3D environment and provides tools for creating 
         - Press `K` to create and show or hide the Kdop for all UAVs (14Dop unless changed to 6).
 
     - **Detect and show the Collisions in the Airspace**
-        - Press `L` to find collisions in the airspace using the collision detection hierarchy defined in UAV.collides(). The first time this is used, the necessary bounding volumes will be generated but not shown (unless already visible).
+        - Press `L` to find momentary collisions in the airspace using the collision detection hierarchy defined in UAV.collides(). The first time this is used, the necessary bounding volumes will be generated but not shown (unless already visible).
         The collision detection method used for the visualization is the last collision detection method in the hierarchy (currently Kdop).
+    
+    - **Show the collisions of the continuous Kdops that are avoided**
+        - Press `T` to show (and hide) the collisions of the continuous Kdops that are avoided. Keep in mind that the UAVs avoid these collisions on the same frame that they are detected, so they might be outside the continuous Kdop when the shape is shown.
 
     - **Move a specific UAV**
         - Use the arrow keys, space (up) and backspace (down) to move the UAV named v22_osprey_0 in the environment.
