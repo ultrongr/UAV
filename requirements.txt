@@ -59,3 +59,4 @@ widgetsnbextension==4.0.10
 zipp==3.18.0
 python-fcl
 trimesh
+scipy
