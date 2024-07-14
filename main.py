@@ -67,8 +67,7 @@ models = ["F52",
         
         # "quadcopter_scifi", ## Huge amount of vertices makes moving it time consuming
         
-        # "fight_drone", ## small kdop issue
-        # "B2_Spirit", ## small kdop issue
+
         
     ]
 show_times = False
