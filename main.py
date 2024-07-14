@@ -59,10 +59,12 @@ config_info={
 }
 
 
-models = ["v22_osprey",
+models = ["F52",
         "twin_copter",
-        "F52",
         "Helicopter",
+        "v22_osprey",
+        
+        
         # "quadcopter_scifi", ## Huge amount of vertices makes moving it time consuming
         
         # "fight_drone", ## small kdop issue
@@ -91,7 +93,7 @@ class UAV:
         if not self._class in UAV.classes:
             UAV.classes[self._class] = 0
         self.name = f"{self._class}_{UAV.classes[self._class]}"
-        print(self.name, f"{len(self.mesh.vertices)} vertices")
+        print(self.name, f"{len(self.mesh.vertices)} vertices, {len(self.mesh.triangles)} triangles")
         UAV.classes[self._class] += 1
 
 
@@ -116,10 +118,11 @@ class UAV:
 
         self.position = np.mean(self.mesh.vertices, axis=0)
         self.direction = np.array([0, 0, -1])
-        if "Helicopter" in filename: # Correcting incorrect rotation of mesh to aline with direction
+        if "Helicopter" in filename: # Correcting incorrect rotation of mesh to align with direction
             self.direction = np.array([1, 0, 0])
         self.speed = 0.5*self.direction
         self.number_of_stationary_frames = 0
+        self.target = None
         position = np.array(position)
         if position.any():            
             self.move_to(position)
@@ -793,6 +796,13 @@ class UAV:
         dist = np.linalg.norm(self.position - np.array([landing_spot.x, landing_spot.y, landing_spot.z]))
         return dist < threshold
 
+    def has_reached_target(self, threshold:float = 0.1):
+
+        target_pos = np.array([self.target.x, self.target.y, self.target.z])
+        dist = np.linalg.norm(self.position - target_pos)
+        return dist < threshold
+
+
     def scale(self, scale:float = None, fit_to_unit_sphere:bool = False):
         """
         Scale the UAV by the specified factor.
@@ -942,8 +952,8 @@ class Airspace(Scene3D):
 
         self.beacons: dict[str] = {}
         self.landing_spots: dict[str] = {}
-        self.mode:str = None # Can be avoidance/landing/target_beacon/landing_time
-        self.new_uavs_flow: float = 0 # Used to determine the flow of new UAVs in case of landing_time
+        self.mode:str = None # Can be avoidance/landing/target_beacon/landing_take_off
+        self.new_uavs_flow: float = 0 # Used to determine the flow of new UAVs in case of landing_take_off
         self.protocol = None # The protocol by which the UAV movement is decided
 
         # Stats:
@@ -1145,15 +1155,9 @@ class Airspace(Scene3D):
                 self.addShape(self.landing_spots[uav.name], uav.name+"_landing_spot")
         self.time_spent_adding_uavs += time.time() - time1
 
-    def create_landing_uavs_time(self, dome_radius:float = 15, flow:float = 0.5):
-        """Create UAVs that are on the dome sphere and will be landing on the landing spots, however not all are created now, they will be created over time
-        Inputs:
-        - dome_radius: the radius of the dome around the UAVs
-        - flow: the chance that a UAV will spawn at every frame (dt)"""
-        
-        self.protocol = self.protocol_landing
-        self.method = "landing_time"
-
+      
+    def create_landing_take_off_uavs(self, dome_radius:float = 15, flow:float = 0.5):
+        """Create the dome and landing spots for future UAVs that will be landing and taking off"""
         self.new_uavs_flow = flow
         self.dome_radius = dome_radius
 
@@ -1163,10 +1167,61 @@ class Airspace(Scene3D):
         self.addShape(self.center, "center")
         self.addShape(self.dome, "dome")
 
-        for i in range(self.N*self.N//3):
-            self.create_new_landing_uav()
+
+    def create_new_taking_off_uav(self):
+        """Create a new UAV that will be taking off from the landing pad"""
+
+
+        other_uavs = self.uavs.values()
+
+        def random_point_on_upper_hemisphere(center=[0, 0, 0]):
+            # Generate random angles
+            dth = np.pi/4
+            theta = np.random.uniform(0, 2 * np.pi)
+            phi = np.random.uniform(0, np.pi / 2 - dth)
+            radius = 15
+
+            # Spherical to Cartesian conversion
+            x = radius * np.sin(phi) * np.cos(theta)
+            z = radius * np.sin(phi) * np.sin(theta)
+            y = radius * np.cos(phi)
+
+
+            
+            return np.array([x, y, z]) + center
+
+        def min_distance_from_beacons(beacons, position):
+            if not beacons:
+                return np.inf
+            other_positions = [[beacon.x, beacon.y, beacon.z] for beacon in beacons.values()]
+            min_dist = np.min(np.linalg.norm(np.array(other_positions) - np.array(position), axis=1))
+            return min_dist
+
         
         
+        center = [self.N, 0, self.N]
+        number_of_uavs = len(self.uavs)
+        i = number_of_uavs//self.N
+        j = number_of_uavs%self.N
+        new_pos = [2*i+1, 0.1, 2*j+1]
+        new_speed = np.random.uniform(0, speed_constant)
+        new_direction = np.random.uniform(0, 2*np.pi)
+        # new_model = np.random.choice(models)
+        new_model_index = number_of_uavs%len(models)
+        new_model = models[new_model_index]
+        new_filename = f"models/{new_model}.obj"
+        new_uav = UAV(self, new_filename, position=new_pos, scale=None)
+        new_uav.rotate(new_direction, [0, 1, 0])
+        new_uav.speed = new_speed*np.array(new_uav.direction)
+        self.uavs[new_uav.name] = new_uav
+        colors = [Color.RED, Color.GREEN, Color.BLUE, Color.YELLOW, Color.ORANGE, Color.MAGENTA]
+        beacon_pos = random_point_on_upper_hemisphere(center)
+        while min_distance_from_beacons(self.beacons, beacon_pos) < 3:
+            beacon_pos = random_point_on_upper_hemisphere(center)
+        self.beacons[new_uav.name] = Sphere3D(p=beacon_pos, radius=0.1, resolution=30, color = colors[(i+j)%len(colors)])
+        self.addShape(self.beacons[new_uav.name], new_uav.name+"_beacon")
+        new_uav.target = self.beacons[new_uav.name]
+
 
     def create_new_landing_uav(self):
         """Create a new UAV that is inside the dome sphere and will be landing on the landing spots"""
@@ -1201,22 +1256,27 @@ class Airspace(Scene3D):
 
         while min_distance_from_uavs(other_uavs, new_pos) < 3:
             new_pos = random_point_on_upper_hemisphere(center)
-        
+
+
+        number_of_uavs = len(self.uavs)
         new_speed = np.random.uniform(0, speed_constant)
         new_direction = np.random.uniform(0, 2*np.pi)
-        new_model = np.random.choice(models)
+        # new_model = np.random.choice(models)
+        new_model_index = number_of_uavs%len(models)
+        new_model = models[new_model_index]
         new_filename = f"models/{new_model}.obj"
         new_uav = UAV(self, new_filename, position=new_pos, scale=None)
         new_uav.rotate(new_direction, [0, 1, 0])
         new_uav.speed = new_speed*np.array(new_uav.direction)
         self.uavs[new_uav.name] = new_uav
         colors = [Color.RED, Color.GREEN, Color.BLUE, Color.YELLOW, Color.ORANGE, Color.MAGENTA]
-        number_of_uavs = len(self.uavs)-1
+        
         i = number_of_uavs//self.N
         j = number_of_uavs%self.N
         self.landing_spots[new_uav.name] = Sphere3D(p=[2*i+1, 0.1, 2*j+1], radius=0.1, resolution=30, color = colors[(i+j)%len(colors)])
         self.addShape(self.landing_spots[new_uav.name], new_uav.name+"_landing_spot")
         self.time_spent_adding_uavs += time.time() - time1
+        new_uav.target = self.landing_spots[new_uav.name]
 
     def find_collisions(self, show):
         """Find the collisions between the UAVs in the airspace for a specific moment"""
@@ -1389,10 +1449,13 @@ class Airspace(Scene3D):
             print("new frame", time.time()-self.last_update)
         self.last_update = time.time()
 
-        if hasattr(self, "method") and self.method == "landing_time": # If the method is landing_time, then new UAVs are added over time
+        if hasattr(self, "method") and self.method == "landing_take_off": # If the method is landing_take_off, then new UAVs are added over time
             if len(self.uavs.values())<self.N*self.N:
                 if np.random.rand()<self.new_uavs_flow:
-                    self.create_new_landing_uav()
+                    if np.random.rand()<0.5:
+                        self.create_new_landing_uav()
+                    else:
+                        self.create_new_taking_off_uav()
 
 
         # self.protocol_avoidance()
@@ -1530,8 +1593,6 @@ class Airspace(Scene3D):
         self.time_spent_moving_uavs += time.time()-time1
 
 
-                
-
     def protocol_landing(self, show = True):
         """A protocol for the UAVs to reach the landing spot"""
 
@@ -1611,6 +1672,84 @@ class Airspace(Scene3D):
                 self.number_of_uav_frames_without_speed += 1
         self.time_spent_moving_uavs += time.time()-time1
     
+    def protocol_landing_take_off(self, show = True):
+        """A protocol for the UAVs to reach the landing spot and then take off again"""
+
+        self.mode = "landing_take_off"
+        self.protocol = self.protocol_landing_take_off
+
+        def find_best_direction(uav, other_positions, target_position):
+            """Find the best direction for the UAV to move in to avoid the other UAVs and reach the target"""
+
+            if uav.has_reached_target( threshold=0.15):
+                return np.array([0, 0, 0])
+            
+            vectors = [other_pos-uav.position for other_pos in other_positions]
+            vectors_normalized = [v/np.linalg.norm(v) for v in vectors if v.any()]
+            sum_of_vectors = np.sum(vectors_normalized, axis=0)
+            sum_of_vectors = sum_of_vectors
+            if np.allclose(sum_of_vectors, 0):
+                avoid_direction = np.array([0, 0, 0])
+            else:
+                sum_of_vectors = sum_of_vectors/np.linalg.norm(sum_of_vectors)
+            avoid_direction = -sum_of_vectors
+
+            if uav.number_of_stationary_frames > 5:
+                uav.move_by(avoid_direction*self.dt*0.1)
+            if uav.number_of_stationary_frames > 3:
+                return avoid_direction
+            
+            target_direction = target_position-uav.position
+
+            target_direction = target_direction/np.linalg.norm(target_direction)
+
+            best_direction = target_direction + avoid_direction
+            best_direction = best_direction/np.linalg.norm(best_direction)
+            return best_direction
+        
+        def find_target_direction(uav, target_position):
+            """Find the direction in which the UAV should move to reach the target position"""
+            target_direction = target_position-uav.position
+            if uav.has_reached_target( threshold=0.15):
+                return np.array([0, 0, 0])
+            target_direction = target_direction/np.linalg.norm(target_direction)
+            return target_direction
+
+
+        time1 = time.time()
+        collides = self.find_collisions_dt(self.dt, show=show) # Get the collision pairs
+        if show_times:
+            print(f"Time taken to find the collisions(1): {time.time()-time1:.2f}s")
+        uavs = list(self.uavs.values())
+
+        for i,uav in enumerate(self.uavs.values()):
+
+            target = uav.target
+            target_position = np.array([target.x, target.y, target.z])  
+            if not collides[i]: # If the UAV is not colliding with any other UAV then try to move it towards the landing spot
+                uav.speed = speed_constant*find_target_direction(uav, target_position)
+                continue
+
+            colliding = collides[i] # If the UAV is colliding with other UAVs then try to avoid the other UAVs and move towards the landing spot
+            other_positions = [uavs[j].position for j in colliding]
+            best_direction = find_best_direction(uav, other_positions, target_position)
+            uav.speed = speed_constant*best_direction
+
+        time2 = time.time()
+        collides = self.find_collisions_dt(self.dt, show=show) # Check for collisions again
+        if show_times:
+            print(f"Time taken to find the collisions(2): {time.time()-time2:.2f}s")
+        time1 = time.time()
+        for i,uav in enumerate(self.uavs.values()): # For the UAVs that are not colliding move them according to set speed
+            if not i in collides or not collides[i]:
+                uav.number_of_stationary_frames = 0
+                uav.move_by(uav.speed*self.dt)
+            else: # If the UAV is colliding with other UAVs then do not move it
+                uav.number_of_stationary_frames += 1
+                self.number_of_uav_frames_without_speed += 1
+        self.time_spent_moving_uavs += time.time()-time1
+        
+
     def simulation_has_ended(self):
         if self.mode == "landing":
             for uav in self.uavs.values():
@@ -1622,11 +1761,11 @@ class Airspace(Scene3D):
                 if not uav.has_reached_beacon(self.beacons[uav.name], threshold=0.15):
                     return False
             return True
-        if self.mode == "landing_time":
-            if len(self.uavs.values()<self.N*self.N):
+        if self.mode == "landing_take_off": 
+            if len(self.uavs.values())<self.N*self.N:
                 return False
             for uav in self.uavs.values():
-                if not uav.has_reached_landing_spot(self.beacons[uav.name], threshold=0.15):
+                if not uav.has_reached_target( threshold=0.15):
                     return False
             return True
 
@@ -2003,6 +2142,10 @@ def main():
         print("2. Landing (UAVs start from their beacons and land on the landing spots)")
         print("3. Landing time (UAVs start from their beacons and land on the landing spots, new UAVs are added during the simulation in random positions)")
         choice = input("Select the protocol to run (1-3, default is 3): ")
+        try:
+            choice = int(choice)
+        except:
+            choice = 3
         while int(choice) not in range(1, 4):
             if not choice:
                 choice = 3
@@ -2021,8 +2164,9 @@ def main():
                     flow = float(input("Enter the flow of new UAVs (default is 0.5, close to 0.5 is recommended): "))
                 except:
                     flow = 0.5
-            airspace.create_landing_uavs_time(flow = flow)
-            airspace.protocol_landing(show=False)
+            airspace.create_landing_take_off_uavs( dome_radius=15, flow = flow)
+            airspace.protocol = airspace.protocol_landing_take_off
+            airspace.method = "landing_take_off"
         print("Press P to pause/unpause")
 
 
