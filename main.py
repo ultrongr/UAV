@@ -797,6 +797,7 @@ class UAV:
         return dist < threshold
 
     def has_reached_target(self, threshold:float = 0.1):
+        """Check if the UAV has reached the target"""
 
         target_pos = np.array([self.target.x, self.target.y, self.target.z])
         dist = np.linalg.norm(self.position - target_pos)
