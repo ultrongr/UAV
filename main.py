@@ -2108,7 +2108,11 @@ def main():
     if get_question() < 6:
         delattr(Airspace, "on_idle")
     
-    airspace = Airspace(1920, 1080, N = 5, dt=dt)
+    if N>6:
+        global models
+        models = ["Helicopter"]
+    
+    airspace = Airspace(1920, 1080, N = N, dt=dt)
 
     if get_question() == 1: #Random UAVs
         airspace.create_random_uavs()
