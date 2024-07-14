@@ -2140,7 +2140,7 @@ def main():
         print("Possible protocols for Q8:")
         print("1. Target beacon (UAVs take off and reach the target beacon)")
         print("2. Landing (UAVs start from their beacons and land on the landing spots)")
-        print("3. Landing time (UAVs start from their beacons and land on the landing spots, new UAVs are added during the simulation in random positions)")
+        print("3. Landing and take off (UAVs appear at the landing spots or in the sky and they move towards their target (beacon or take off spot respectively))")
         choice = input("Select the protocol to run (1-3, default is 3): ")
         try:
             choice = int(choice)
