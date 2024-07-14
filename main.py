@@ -1488,7 +1488,7 @@ class Airspace(Scene3D):
                 
             
         time1 = time.time()
-        collides = self.find_collisions_dt(self.dt, show=True) # Get the collision pairs
+        collides = self.find_collisions_dt(self.dt, show=show) # Get the collision pairs
         if show_times:
             print(f"Time taken to find the collisions(1): {time.time()-time1:.2f}s")
         uavs = list(self.uavs.values())
@@ -2135,7 +2135,7 @@ def main():
         print("Press P to pause/unpause")
     if get_question() == 7:
         airspace.create_random_uavs_non_colliding()
-        airspace.avoidance(show=False)
+        airspace.protocol_avoidance(show=False)
         print("Press P to pause/unpause")
     if get_question() == 8:
         print("Possible protocols for Q8:")
