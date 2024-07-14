@@ -89,4 +89,4 @@ This project simulates UAVs in a 3D environment and provides tools for creating 
 
 ## Communication
 
-- If you **need help**, you can contact me at up1083865@ac.upatras.gr
+- If you **need help**, you can contact me at `up1083865@ac.upatras.gr`
