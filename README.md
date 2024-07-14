@@ -75,7 +75,7 @@ This project simulates UAVs in a 3D environment and provides tools for creating 
 
     - **Detect and show the Collisions in the Airspace**
         - Press `L` to find momentary collisions in the airspace using the collision detection hierarchy defined in UAV.collides(). The first time this is used, the necessary bounding volumes will be generated but not shown (unless already visible).
-        The collision detection method used for the visualization is the last collision detection method in the hierarchy (currently Kdop).
+        The collision detection method used for the visualization is the last collision detection method in the hierarchy (depends on the question you execute).
     
     - **Show the collisions of the continuous Kdops that are avoided**
         - Press `T` to show (and hide) the collisions of the continuous Kdops that are avoided. Keep in mind that the UAVs avoid these collisions on the same frame that they are detected, so they might be outside the continuous Kdop when the shape is shown.
