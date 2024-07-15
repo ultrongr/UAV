@@ -2074,7 +2074,7 @@ def main():
 
     print("Select the question number to run (Q9 will run in any suitable case):")
     for i, info in enumerate(config_info.values()):
-        print(f"{i}. {info}")
+        print(f"{i+1}. {info}")
     
     choice = input("Enter the choice (1-8, default is 8): ")
     try:
